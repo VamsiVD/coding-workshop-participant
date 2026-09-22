@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: acme-incidents-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-acme_incidents}
+      POSTGRES_USER: ${POSTGRES_USER:-acme}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.sample to .env}
+      # Deterministic collation so ORDER BY results match between machines.
+      POSTGRES_INITDB_ARGS: "--locale=C --encoding=UTF8"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Scripts here run once, in filename order, on first start of an empty volume.
+      - ./backend/db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-acme} -d ${POSTGRES_DB:-acme_incidents}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # Browser-based SQL client for manual testing. Started only with:
+  #   docker compose --profile tools up -d
+  adminer:
+    image: adminer:5
+    container_name: acme-incidents-adminer
+    restart: unless-stopped
+    profiles: ["tools"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    ports:
+      - "${ADMINER_PORT:-8080}:8080"
+
+volumes:
+  pgdata:
