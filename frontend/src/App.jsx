@@ -1,13 +1,17 @@
 import { CssBaseline, ThemeProvider } from '@mui/material';
 import theme from './theme/crateTheme';
+import adminTheme from './theme/adminTheme';
 import { clearSession, getSession } from './services/session';
 import AppHeader from './components/layout/AppHeader';
+import ConsoleHeader from './components/layout/ConsoleHeader';
 import LoginPage from './features/login/LoginPage';
 import RegisterPage from './features/register/RegisterPage';
 import DashboardPage from './features/dashboard/DashboardPage';
 import ReportIncidentPage from './features/incidents/report/ReportIncidentPage';
 
 const ROLE_LABELS = { employee: 'Employee', engineer: 'Engineer', admin: 'Facility admin' };
+
+const initialsOf = (name) => name.split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
 
 function signOut() {
   clearSession();
@@ -26,30 +30,45 @@ function route(path) {
     return null;
   }
   const { user } = session;
-  const reporting = path.startsWith('/incidents/new');
+  // Reporting keeps the crate-wood look with its own header; the dashboard
+  // uses the console theme and header (see App() below).
+  if (path.startsWith('/incidents/new')) {
+    return (
+      <>
+        <AppHeader
+          userLabel={`${user.full_name} · ${ROLE_LABELS[user.role] ?? user.role}`}
+          onSignOut={signOut}
+          links={[
+            { label: 'Dashboard', href: '/dashboard' },
+            { label: 'Report', href: '/incidents/new', active: true },
+          ]}
+        />
+        <ReportIncidentPage />
+      </>
+    );
+  }
+
   return (
     <>
-      <AppHeader
-        userLabel={`${user.full_name} · ${ROLE_LABELS[user.role] ?? user.role}`}
-        showReportButton={!reporting}
+      <ConsoleHeader
+        name={user.full_name}
+        role={ROLE_LABELS[user.role] ?? user.role}
+        initials={initialsOf(user.full_name)}
         onSignOut={signOut}
-        links={[
-          { label: 'Dashboard', href: '/dashboard', active: !reporting },
-          { label: 'Report', href: '/incidents/new', active: reporting },
-        ]}
+        links={[{ label: 'Dashboard', href: '/dashboard', active: true }]}
       />
-      {reporting
-        ? <ReportIncidentPage />
-        : <DashboardPage user={{ firstName: user.full_name.split(' ')[0] }} />}
+      <DashboardPage user={{ firstName: user.full_name.split(' ')[0] }} />
     </>
   );
 }
 
 export default function App() {
+  const path = window.location.pathname;
+  const useConsoleTheme = path.startsWith('/dashboard');
   return (
-    <ThemeProvider theme={theme}>
+    <ThemeProvider theme={useConsoleTheme ? adminTheme : theme}>
       <CssBaseline />
-      {route(window.location.pathname)}
+      {route(path)}
     </ThemeProvider>
   );
 }

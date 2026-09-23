@@ -1,14 +1,8 @@
-import { crate } from '../../theme/crateTheme';
+import { admin } from '../../theme/adminTheme';
 
 export const STATUSES = ['Open', 'In Progress', 'Blocked', 'Resolved', 'Closed'];
 
-export const STATUS_STYLE = {
-  Open: [crate.field, crate.ink],
-  'In Progress': [crate.ink, crate.paper],
-  Blocked: [crate.red, crate.paper],
-  Resolved: [crate.wood, crate.ink],
-  Closed: [crate.tint, crate.ink],
-};
+export const STATUS_DOT = { Open: admin.tan, 'In Progress': admin.brown, Blocked: admin.danger, Resolved: '#9c8a6c', Closed: '#dccfb6' };
 
 export const isActive = (t) => t.status !== 'Closed';
 export const isDone = (t) => t.status === 'Resolved' || t.status === 'Closed';
@@ -19,7 +13,7 @@ export function flowBars(status) {
   return STATUSES.map((name, i) => ({
     name,
     current: i === at,
-    color: i === at ? (status === 'Blocked' ? crate.red : crate.ink) : i < at ? '#8a7458' : 'rgba(42,29,20,.15)',
+    color: i === at ? (status === 'Blocked' ? admin.danger : admin.red) : i < at ? admin.tanLight : admin.track,
   }));
 }
 

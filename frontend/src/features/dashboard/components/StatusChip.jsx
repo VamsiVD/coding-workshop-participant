@@ -1,25 +1,10 @@
 import { Box } from '@mui/material';
-import { crate, fonts } from '../../../theme/crateTheme';
-import { STATUS_STYLE } from '../ticketModel';
+import { STATUS_DOT } from '../ticketModel';
 
 export default function StatusChip({ status, size = 'md' }) {
-  const [bg, fg] = STATUS_STYLE[status] ?? STATUS_STYLE.Open;
   return (
-    <Box
-      component="span"
-      sx={{
-        fontFamily: fonts.heading,
-        fontSize: size === 'sm' ? 10.5 : 11,
-        letterSpacing: '.12em',
-        textTransform: 'uppercase',
-        whiteSpace: 'nowrap',
-        px: 1,
-        py: 0.375,
-        border: `1.5px solid ${crate.ink}`,
-        bgcolor: bg,
-        color: fg,
-      }}
-    >
+    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.85, whiteSpace: 'nowrap', fontSize: size === 'sm' ? 12.5 : 13.5 }}>
+      <Box component="span" sx={{ width: size === 'sm' ? 7 : 8, height: size === 'sm' ? 7 : 8, borderRadius: '50%', bgcolor: STATUS_DOT[status] ?? STATUS_DOT.Open, flex: 'none' }} />
       {status}
     </Box>
   );

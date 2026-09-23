@@ -1,11 +1,8 @@
 import { useState } from 'react';
-import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Drawer, IconButton, Link, OutlinedInput, Stack } from '@mui/material';
+import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Drawer, IconButton, TextField, Typography } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import { crate, fonts } from '../../../theme/crateTheme';
+import { admin } from '../../../theme/adminTheme';
 import { flowBars, timeAgo } from '../ticketModel';
-
-const dt = { fontFamily: fonts.heading, fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', opacity: 0.75 };
-const smallBtn = { minHeight: 38, px: 1.75, fontSize: 12, letterSpacing: '.12em' };
 
 export default function TicketDrawer({ ticket, location, open, onClose, onConfirm, onReopen, onEscalate, onAddNote, busy }) {
   const [draft, setDraft] = useState('');
@@ -35,48 +32,47 @@ export default function TicketDrawer({ ticket, location, open, onClose, onConfir
       anchor="right"
       open={open}
       onClose={onClose}
-      PaperProps={{ sx: { width: 460, maxWidth: '100%', bgcolor: crate.paper, borderLeft: `2px solid ${crate.ink}` } }}
-      slotProps={{ backdrop: { sx: { bgcolor: 'rgba(42,29,20,.55)' } } }}
+      PaperProps={{ sx: { width: 460, maxWidth: '100%', bgcolor: admin.bg, borderRadius: '16px 0 0 16px' } }}
+      slotProps={{ backdrop: { sx: { bgcolor: 'rgba(42,29,20,.45)' } } }}
     >
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 2.25, py: 1.5, bgcolor: crate.ink, color: crate.paper, borderTop: `4px solid ${crate.red}`, position: 'sticky', top: 0, zIndex: 1 }}>
-        <Box component="span" sx={{ fontFamily: fonts.heading, fontWeight: 600, fontSize: 20, letterSpacing: '.06em' }}>{ticket.ref}</Box>
-        <IconButton onClick={onClose} aria-label="Close" sx={{ color: crate.paper, border: `1.5px solid ${crate.paper}`, borderRadius: 0, width: 40, height: 40 }}>
-          <CloseIcon fontSize="small" />
-        </IconButton>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1.5, p: '14px 20px', borderBottom: `1px solid ${admin.line}`, position: 'sticky', top: 0, bgcolor: admin.bg, zIndex: 1 }}>
+        <Typography sx={{ fontWeight: 600, fontSize: 18, color: admin.brown }}>{ticket.ref}</Typography>
+        <IconButton aria-label="Close" onClick={onClose} sx={{ border: `1px solid ${admin.line}`, borderRadius: '8px' }}><CloseIcon fontSize="small" /></IconButton>
       </Box>
 
-      <Stack spacing={2} sx={{ p: 2.25 }}>
+      <Box sx={{ p: 2.5, display: 'grid', gap: 2.75 }}>
         <div>
-          <Box sx={{ fontSize: 17, fontWeight: 700, lineHeight: 1.3 }}>{ticket.title}</Box>
-          <Box sx={{ fontSize: 13, mt: 0.5 }}>{location}{ticket.seat ? ` · Seat ${ticket.seat}` : ''}</Box>
+          <Typography variant="h3">{ticket.title}</Typography>
+          <Typography sx={{ fontSize: 13.5, mt: 0.5, color: admin.muted }}>{location}{ticket.seat ? ` · Seat ${ticket.seat}` : ''}</Typography>
         </div>
 
-        <Box role="img" aria-label={`Status: ${ticket.status}`} sx={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 0.5 }}>
+        <Box role="img" aria-label={`Status: ${ticket.status}`} sx={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '3px' }}>
           {flowBars(ticket.status).map((b) => (
-            <Box key={b.name} sx={{ display: 'grid', gap: 0.625, textAlign: 'center' }}>
-              <Box component="span" sx={{ height: 6, bgcolor: b.color }} />
-              <Box component="span" sx={{ fontFamily: fonts.heading, fontSize: 10.5, letterSpacing: '.06em', textTransform: 'uppercase', fontWeight: b.current ? 600 : 400 }}>{b.name}</Box>
+            <Box key={b.name} sx={{ display: 'grid', gap: 0.75 }}>
+              <Box component="span" sx={{ height: 4, borderRadius: 2, bgcolor: b.color }} />
+              <Box component="span" sx={{ fontSize: 11.5, color: b.current ? admin.ink : admin.faint, fontWeight: b.current ? 500 : 400 }}>{b.name}</Box>
             </Box>
           ))}
         </Box>
 
         {ticket.status === 'Blocked' && ticket.blockedReason && (
-          <Box sx={{ border: `2px solid ${crate.red}`, bgcolor: crate.field, px: 1.5, py: 1.25, fontSize: 13.5, lineHeight: 1.45 }}>
-            <Box component="b" sx={{ color: crate.red }}>Blocked:</Box> {ticket.blockedReason}
+          <Box sx={{ border: '1px solid oklch(0.8 0.08 25)', borderRadius: '10px', bgcolor: 'oklch(0.96 0.02 25)', p: '12px 16px', fontSize: 14, lineHeight: 1.5, color: admin.dangerFg }}>
+            <b style={{ fontWeight: 500 }}>Blocked:</b> {ticket.blockedReason}
           </Box>
         )}
 
         {ticket.status === 'Resolved' && (
-          <Stack spacing={1.25} sx={{ border: `2px solid ${crate.ink}`, bgcolor: crate.field, p: 1.5 }}>
-            <Box sx={{ fontSize: 13.5, lineHeight: 1.45 }}><b>Is it fixed?</b> {ticket.engineer} marked this resolved. Confirm, or reopen it if the problem is still there.</Box>
-            <Stack direction="row" spacing={1}>
-              <Button variant="contained" disabled={busy} onClick={() => onConfirm(ticket.ref)} sx={{ ...smallBtn, boxShadow: `2px 2px 0 ${crate.ink}` }}>Yes, it’s fixed</Button>
-              <Button variant="outlined" disabled={busy} onClick={() => onReopen(ticket.ref)} sx={smallBtn}>Reopen</Button>
-            </Stack>
-          </Stack>
+          <Box sx={{ border: `1px solid ${admin.tan}`, borderRadius: '10px', bgcolor: admin.sand, p: '14px 16px', display: 'grid', gap: 1.25 }}>
+            <Typography sx={{ fontWeight: 600, fontSize: 16 }}>Is it fixed?</Typography>
+            <Typography sx={{ fontSize: 14, lineHeight: 1.5 }}>{ticket.engineer} marked this resolved. Confirm, or reopen it if the problem is still there.</Typography>
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              <Button variant="contained" disabled={busy} onClick={() => onConfirm(ticket.ref)}>Yes, it’s fixed</Button>
+              <Button variant="outlined" color="secondary" disabled={busy} onClick={() => onReopen(ticket.ref)} sx={{ bgcolor: admin.bg }}>Reopen</Button>
+            </Box>
+          </Box>
         )}
 
-        <Box component="dl" sx={{ m: 0, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.25, fontSize: 13, borderTop: `2px solid ${crate.ink}`, borderBottom: `2px solid ${crate.ink}`, py: 1.5 }}>
+        <Box component="dl" sx={{ m: 0, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.75, fontSize: 14, borderTop: `1px solid ${admin.line}`, borderBottom: `1px solid ${admin.line}`, py: 1.75 }}>
           {[
             ['Engineer', ticket.engineer ?? 'Unassigned'],
             ['Priority', `${ticket.priority}${ticket.escalationRequested ? ' · escalation requested' : ''}`],
@@ -84,46 +80,46 @@ export default function TicketDrawer({ ticket, location, open, onClose, onConfir
             ['Reported', timeAgo(ticket.createdAt)],
           ].map(([k, v]) => (
             <div key={k}>
-              <Box component="dt" sx={dt}>{k}</Box>
-              <Box component="dd" sx={{ m: 0, mt: 0.25 }}>{v}</Box>
+              <Box component="dt" sx={{ fontSize: 12, color: admin.muted }}>{k}</Box>
+              <Box component="dd" sx={{ m: 0 }}>{v}</Box>
             </div>
           ))}
         </Box>
 
         {canEscalate && (
-          ticket.escalationRequested
-            ? <Box sx={{ fontSize: 13 }}>Escalation requested · waiting for admin</Box>
-            : <Link component="button" type="button" onClick={() => setEscalateOpen(true)} sx={{ fontSize: 13, alignSelf: 'flex-start' }}>Request escalation</Link>
+          <Button
+            variant="outlined"
+            color="secondary"
+            disabled={ticket.escalationRequested}
+            onClick={() => setEscalateOpen(true)}
+            sx={{ justifySelf: 'start' }}
+          >
+            {ticket.escalationRequested ? 'Escalation requested · waiting for admin' : 'Request escalation'}
+          </Button>
         )}
 
-        <Stack spacing={1}>
-          <Box sx={{ fontFamily: fonts.heading, fontWeight: 600, fontSize: 13, letterSpacing: '.12em', textTransform: 'uppercase' }}>Notes</Box>
-          {canNote && (
-            <Box component="form" onSubmit={send} sx={{ display: 'flex', gap: 1 }}>
-              <OutlinedInput
-                placeholder="Add a note for the engineer"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                inputProps={{ 'aria-label': 'Add a note' }}
-                sx={{ flex: 1, minWidth: 0, '& input': { py: '9px', px: '10px', fontSize: 13.5 } }}
-              />
-              <Button type="submit" variant="contained" color="secondary" disabled={busy || !draft.trim()} sx={{ minHeight: 40, px: 1.75, fontSize: 12, boxShadow: 'none', border: `2px solid ${crate.ink}` }}>Send</Button>
-            </Box>
-          )}
+        <Box sx={{ display: 'grid', gap: 1.25 }}>
+          <Typography variant="h4">Activity</Typography>
           {ticket.notes?.map((n) => (
-            <Box key={n.id} sx={{ bgcolor: n.mine ? crate.tint : crate.field, border: `1.5px solid ${crate.ink}`, px: 1.25, py: 1, fontSize: 13, lineHeight: 1.45 }}>
-              <Box sx={{ fontSize: 11.5, mb: 0.25 }}><b>{n.author}</b> · {timeAgo(n.createdAt)}</Box>
+            <Box key={n.id} sx={{ borderLeft: `2px solid ${n.mine ? admin.tan : admin.red}`, py: 0.25, pl: 1.5, fontSize: 14, lineHeight: 1.45 }}>
+              <Box sx={{ fontSize: 12, color: admin.muted, mb: 0.25 }}><Box component="span" sx={{ fontWeight: 500, color: admin.ink }}>{n.author}</Box> · {timeAgo(n.createdAt)}</Box>
               {n.text}
             </Box>
           ))}
-        </Stack>
-      </Stack>
+          {canNote && (
+            <Box component="form" onSubmit={send} sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
+              <TextField size="small" fullWidth placeholder="Add a note for the engineer" value={draft} onChange={(e) => setDraft(e.target.value)} inputProps={{ 'aria-label': 'Add a note' }} />
+              <Button type="submit" variant="contained" disabled={busy || !draft.trim()}>Send</Button>
+            </Box>
+          )}
+        </Box>
+      </Box>
 
-      <Dialog open={escalateOpen} onClose={() => setEscalateOpen(false)} PaperProps={{ sx: { border: `2px solid ${crate.ink}`, boxShadow: `6px 6px 0 ${crate.ink}`, bgcolor: crate.paper } }}>
-        <DialogTitle sx={{ fontFamily: fonts.heading, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', fontSize: 18 }}>Request escalation</DialogTitle>
+      <Dialog open={escalateOpen} onClose={() => setEscalateOpen(false)} PaperProps={{ sx: { borderRadius: '16px', bgcolor: admin.bg } }}>
+        <DialogTitle sx={{ fontWeight: 600, fontSize: 20 }}>Request escalation</DialogTitle>
         <DialogContent>
-          <Box sx={{ fontSize: 13.5, mb: 1.5 }}>For safety risks, or when a whole team can’t work. A facility admin reviews every request.</Box>
-          <OutlinedInput
+          <Typography sx={{ fontSize: 14, mb: 1.5, color: '#4a3b2c' }}>For safety risks, or when a whole team can’t work. A facility admin reviews every request.</Typography>
+          <TextField
             autoFocus
             fullWidth
             multiline
@@ -132,12 +128,11 @@ export default function TicketDrawer({ ticket, location, open, onClose, onConfir
             value={escalateReason}
             onChange={(e) => setEscalateReason(e.target.value)}
             inputProps={{ 'aria-label': 'Reason for escalation' }}
-            sx={{ p: 0, '& textarea': { p: '10px', fontSize: 14 } }}
           />
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button variant="outlined" onClick={() => setEscalateOpen(false)} sx={smallBtn}>Cancel</Button>
-          <Button variant="contained" disabled={!escalateReason.trim() || busy} onClick={submitEscalation} sx={{ ...smallBtn, boxShadow: `2px 2px 0 ${crate.ink}` }}>Send request</Button>
+          <Button variant="outlined" color="secondary" onClick={() => setEscalateOpen(false)}>Cancel</Button>
+          <Button variant="contained" disabled={!escalateReason.trim() || busy} onClick={submitEscalation}>Send request</Button>
         </DialogActions>
       </Dialog>
     </Drawer>

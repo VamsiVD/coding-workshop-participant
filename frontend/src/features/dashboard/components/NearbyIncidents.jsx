@@ -1,39 +1,39 @@
-import { Box, Button, Paper } from '@mui/material';
-import { crate, fonts } from '../../../theme/crateTheme';
+import { Box, Button, Typography } from '@mui/material';
+import { admin } from '../../../theme/adminTheme';
 import StatusChip from './StatusChip';
 
 export default function NearbyIncidents({ items, locationLabel, onToggle }) {
-  if (!items.length) return null;
+  if (!items?.length) return null;
   return (
-    <Paper component="section" elevation={0} sx={{ border: `2px solid ${crate.ink}`, px: 2, py: 1.75, display: 'grid', gap: 1.25 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.25, alignItems: 'baseline', flexWrap: 'wrap' }}>
-        <Box component="h2" sx={{ m: 0, fontFamily: fonts.heading, fontWeight: 600, fontSize: 15, letterSpacing: '.12em', textTransform: 'uppercase' }}>Around you</Box>
-        <Box component="span" sx={{ fontSize: 12.5 }}>Open issues on {locationLabel}. Already reported, so no need to raise them again.</Box>
+    <Box component="section" sx={{ border: `1px solid ${admin.line}`, borderRadius: '12px', p: '18px 20px', display: 'grid', gap: 1.5 }}>
+      <Box sx={{ display: 'grid', gap: 0.25 }}>
+        <Typography variant="h2">Around you</Typography>
+        <Typography sx={{ fontSize: 13, color: admin.muted }}>Open issues on {locationLabel}. Already reported, so no need to raise them again.</Typography>
       </Box>
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: 1.25 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: 1.5 }}>
         {items.map((n) => (
-          <Box key={n.ref} sx={{ bgcolor: crate.field, border: `1.5px solid ${crate.ink}`, px: 1.5, py: 1.25, display: 'grid', gap: 0.75 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, alignItems: 'baseline' }}>
-              <Box component="span" sx={{ fontFamily: fonts.heading, fontWeight: 600, fontSize: 12.5, letterSpacing: '.06em' }}>{n.ref}</Box>
+          <Box key={n.ref} sx={{ bgcolor: admin.surface, border: `1px solid ${admin.line}`, borderRadius: '10px', p: '12px 14px', display: 'grid', gap: 1 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, alignItems: 'center' }}>
+              <Box component="span" sx={{ fontWeight: 600, fontSize: 14, color: admin.brown }}>{n.ref}</Box>
               <StatusChip status={n.status} size="sm" />
             </Box>
-            <Box sx={{ fontSize: 13.5, lineHeight: 1.35 }}>{n.title}</Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, fontSize: 12 }}>
+            <Box sx={{ fontSize: 14, lineHeight: 1.35 }}>{n.title}</Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, fontSize: 12.5, color: admin.muted }}>
               <span>{n.affectedCount ? `${n.affectedCount} ${n.affectedCount === 1 ? 'person' : 'people'} affected` : 'Reported by a colleague'}</span>
               <Button
                 size="small"
                 variant={n.affectsMe ? 'contained' : 'outlined'}
-                color={n.affectsMe ? 'secondary' : 'inherit'}
+                color={n.affectsMe ? 'primary' : 'secondary'}
                 aria-pressed={n.affectsMe}
                 onClick={() => onToggle(n.ref, !n.affectsMe)}
-                sx={{ minHeight: 28, px: 1.25, fontSize: 11, border: `1.5px solid ${crate.ink} !important`, boxShadow: 'none !important' }}
+                sx={{ whiteSpace: 'nowrap', flex: 'none' }}
               >
-                {n.affectsMe ? '✓ Affects me' : 'Affects me too'}
+                {n.affectsMe ? 'Affects me' : 'Affects me too'}
               </Button>
             </Box>
           </Box>
         ))}
       </Box>
-    </Paper>
+    </Box>
   );
 }

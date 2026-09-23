@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Box, CircularProgress, Snackbar, Stack, Typography } from '@mui/material';
-import { crate } from '../../theme/crateTheme';
+import { admin } from '../../theme/adminTheme';
 import { dashboardApi } from '../../services/dashboardApi';
 import { greeting, isActive, isDone, needsAttention } from './ticketModel';
 import StatCard from './components/StatCard';
@@ -95,11 +95,11 @@ export default function DashboardPage({ user }) {
   const selected = tickets.find((t) => t.ref === openRef);
 
   return (
-    <Box component="main" sx={{ maxWidth: 1080, mx: 'auto', px: 2.5, pt: 3.5, pb: 7, display: 'grid', gap: 2.5 }}>
+    <Box component="main" sx={{ maxWidth: 1080, mx: 'auto', px: 3.5, pt: 4, pb: 8, display: 'grid', gap: 3 }}>
       <Stack spacing={0.5}>
-        <Typography variant="overline" sx={{ color: crate.redDeep }}>{greeting(user.firstName)}</Typography>
+        <Typography sx={{ fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase', color: admin.brown }}>{greeting(user.firstName)}</Typography>
         <Typography variant="h1">My dashboard</Typography>
-        {data?.location && <Typography variant="body1">{data.location}</Typography>}
+        {data?.location && <Typography sx={{ fontSize: 14, color: admin.muted }}>{data.location}</Typography>}
       </Stack>
 
       {loadError && <Alert severity="error">{loadError}</Alert>}
@@ -107,11 +107,11 @@ export default function DashboardPage({ user }) {
 
       {data && (
         <>
-          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 190px), 1fr))', gap: 1.75 }}>
-            <StatCard label="Active" value={counts.open + counts.blocked} hint={`${counts.open} open · ${counts.blocked} blocked`} active={filter === 'active'} onClick={() => setFilter('active')} />
-            <StatCard label="Awaiting you" value={attention.length} hint="Replies and fixes to confirm" tone={attention.length ? 'alert' : 'default'} />
-            <StatCard label="Resolved" value={counts.done} hint="Resolved or closed" active={filter === 'resolved'} onClick={() => setFilter('resolved')} />
-            <StatCard label="Avg. time to fix" value={data.stats.avgFixDays == null ? '—' : `${data.stats.avgFixDays}d`} hint="Your tickets, all time" />
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 2 }}>
+            <StatCard label="Active" value={counts.open + counts.blocked} hint={`${counts.open} open · ${counts.blocked} blocked`} dot={admin.brown} active={filter === 'active'} onClick={() => setFilter('active')} />
+            <StatCard label="Awaiting you" value={attention.length} hint="Replies and fixes to confirm" dot={attention.length ? admin.red : '#dccfb6'} />
+            <StatCard label="Resolved" value={counts.done} hint="Resolved or closed" dot="#9c8a6c" active={filter === 'resolved'} onClick={() => setFilter('resolved')} />
+            <StatCard label="Avg. time to fix" value={data.stats.avgFixDays == null ? '—' : `${data.stats.avgFixDays}d`} hint="Your tickets, all time" dot={admin.tan} />
           </Box>
 
           <AttentionPanel tickets={attention} onConfirm={handlers.confirm} onReopen={handlers.reopen} onReply={openTicket} onDismiss={handlers.dismiss} />
@@ -140,7 +140,7 @@ export default function DashboardPage({ user }) {
         onClose={() => setToast('')}
         message={toast}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-        ContentProps={{ sx: { bgcolor: crate.ink, color: crate.paper, borderRadius: 0, boxShadow: `3px 3px 0 ${crate.red}`, fontFamily: 'inherit' } }}
+        ContentProps={{ sx: { bgcolor: admin.ink, color: admin.surface, borderRadius: '10px' } }}
       />
     </Box>
   );
