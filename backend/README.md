@@ -1,155 +1,183 @@
-# Coding Workshop - Backend Code
+# Backend
 
-## Overview
+REST API for the ACME facility incident management platform. Python, FastAPI
+and PostgreSQL, deployed to AWS Lambda.
 
-This folder contains backend services for CRUD operations with examples. Python with PostgreSQL are preferred, but Java and NodeJS with MongoDB options are available.
+Data access is psycopg3 with parameterised SQL behind a repository layer rather
+than an ORM. The reasoning is recorded in
+[ADR 001](../docs/adr/001-data-access.md).
 
-## Prerequisites
-
-- Compute environment
-    - AWS Lambda with Python Runtime and AWS SDK for Python (Boto3)
-    - AWS Lambda with NodeJS Runtime and AWS SDK for JavaScript
-    - AWS Lambda with Java Runtime and AWS SDK for Java
-- Database environment
-    - AWS Aurora for PostgreSQL-compatible database
-    - AWS DocumentDB for MongoDB-compatible database
-
-Predefined environment variables are injected into each backend service automatically, simplifying the need to manage them manually:
-
-| Variable        | Description           | Local                  | Cloud                   |
-| --------------- | --------------------- | ---------------------- | ----------------------- |
-| `IS_LOCAL`      | Is it local or cloud? | `true`                 | `false`                 |
-| `POSTGRES_HOST` | PostgreSQL hostname   | `localhost`            | AWS Aurora endpoint     |
-| `POSTGRES_PORT` | PostgreSQL port       | `5432`                 | `5432`                  |
-| `POSTGRES_NAME` | PostgreSQL name       | *(empty)*              | AWS Aurora database     |
-| `POSTGRES_USER` | PostgreSQL username   | *(empty)*              | AWS Aurora username     |
-| `POSTGRES_PASS` | PostgreSQL password   | *(empty)*              | AWS Aurora password     |
-| `MONGO_HOST`    | MongoDB hostname      | `172.17.0.1` (Linux) / `host.docker.internal` (Mac/Windows) | AWS DocumentDB endpoint |
-| `MONGO_PORT`.   | MongoDB port          | `27017`                | `27017`                 |
-| `MONGO_NAME`    | MongoDB db name       | *(empty)*              | AWS DocumentDB database |
-| `MONGO_USER`    | MongoDB username      | *(empty)*              | AWS DocumentDB username |
-| `MONGO_PASS`    | MongoDB password      | *(empty)*              | AWS DocumentDB password |
-
-> **Connection behavior:** When `IS_LOCAL` is `true`, the connection uses no TLS even if credentials are present (local MongoDB requires auth but not TLS). When `IS_LOCAL` is `false`, TLS is required for DocumentDB.
-
-## Structure
-
-The backend is organized into Lambda functions, one for each CRUD service:
+## Layout
 
 ```
-coding-workshop-participant/
-├── backend/                             # Backend services
-│   ├── _examples/                         # Hello world examples
-│   │   ├── java-service/                    # Backend service example for Java developers
-│   │   │   ├── src/main/java/com/example/     # Path to Java package
-│   │   │   │   ├── Handler.java               # Business logic using Java
-│   │   │   │   ├── MongoService.java          # MongoDB connectivity service
-│   │   │   │   └── PostgresService.java       # PostgreSQL connectivity service
-│   │   │   └── pom.xml                        # Java configuration and dependencies
-│   │   ├── nodejs-service/                  # Backend service example for NodeJS developers
-│   │   │   ├── eslint.config.js               # ESLint JS tool configuration
-│   │   │   ├── index.js                       # Business logic using NodeJS
-│   │   │   ├── mongo-service.js               # MongoDB connectivity service
-│   │   │   ├── package.json                   # NodeJS configuration and dependencies
-│   │   │   └── postgres-service.js            # PostgreSQL connectivity service
-│   │   └── python-service/                  # Backend service example for Python developers
-│   │       ├── function.py                    # Business logic using Python
-│   │       ├── mongo_service.py               # MongoDB connectivity service
-│   │       ├── postgres_service.py            # PostgreSQL connectivity service
-│   │       └── requirements.txt               # Python configuration and dependencies
-│   └── README.md                        # Backend guide (YOU ARE HERE)
-├── ...
+app/
+  main.py          application, CORS, request logging, /health
+  core/            configuration, connection pool, security, errors, dependencies
+  schemas/         Pydantic models for the API boundary
+  repositories/    all SQL, one module per resource
+  services/        workflow rules, permissions, role scoping
+  api/routes/      HTTP handlers
+tests/
+  api_test.sh      end-to-end check of every endpoint
 ```
 
-## Adding a New Service
+Requests flow **routes → services → repositories → database**. No SQL appears
+in a route, and no HTTP object reaches a repository. Swapping the data-access
+layer would touch nothing above it.
 
-Place your service folder **directly under `backend/`** — one level deep:
+## Running it
 
-```
-backend/
-├── my-service/          ✓ will be deployed
-│   └── function.py
-├── _examples/
-│   └── my-service/      ✗ will NOT be deployed (underscore prefix)
-│       └── function.py
-└── group/
-    └── my-service/      ✗ will NOT be deployed (too deep)
-        └── function.py
+The database must be running either way:
+
+```bash
+docker compose up -d postgres
 ```
 
-Terraform auto-discovers services by looking for `function.py` (Python), `package.json` (Node.js), or `pom.xml` (Java) one level under `backend/`. Any folder prefixed with `_` is ignored.
+### With Docker (nothing to install)
 
-## Usage
-
-### Local Development
-
-To run your application locally:
-
-```sh
-./bin/start-dev.sh
+```bash
+docker compose up -d --build api
 ```
 
-To test your code changes:
+The container runs uvicorn with `--reload`, and `app/` is mounted, so edits
+take effect without a rebuild.
 
-```sh
-# Example: Get all records for {{service-name}}
-curl -X GET https://localhost:3001/api/{{service-name}} \
-     -H "Content-Type: application/json"
+### With uvicorn locally
+
+Requires Python 3.13. On Windows, install it from
+[python.org](https://www.python.org/downloads/) — the `python` that ships with
+Windows is a Microsoft Store stub, not an interpreter. Tick **Add python.exe to
+PATH** during installation.
+
+```bash
+cd backend
+python -m venv .venv
+source .venv/Scripts/activate      # Git Bash on Windows
+# .venv\Scripts\activate           # PowerShell
+# source .venv/bin/activate        # macOS and Linux
+
+pip install -r requirements.txt
+
+cp .env.sample .env                # then fill in POSTGRES_PASS and JWT_SECRET
+
+uvicorn app.main:app --reload --port 8000
 ```
 
-Replace `{{service-name}}` with corresponding service name
-(e.g. `python-service`).
+`POSTGRES_PASS` is the `POSTGRES_PASSWORD` from the repository root `.env`.
+Generate `JWT_SECRET` with `openssl rand -base64 48`; the application refuses
+to start without one at least 32 characters long, rather than falling back to a
+default that anyone could forge tokens against.
 
-To tail logs in real-time:
+Stop the Docker API first if you use the local one, or change the port — both
+listen on 8000.
 
-```sh
-# Example: Get logs for {{service-name}}
-AWS_ENDPOINT_URL="http://localhost.localstack.cloud:4566" \
-    aws logs tail /aws/lambda/{{function-name}} \
-        --follow --format short --color on
+```bash
+docker compose stop api
 ```
 
-Replace `{{function-name}}` with corresponding service name
-(e.g. `coding-workshop-python-service-abcd1234`).
+### Check it is up
 
-### Cloud Deployment
-
-To deploy your backend to AWS:
-
-```sh
-./bin/deploy-backend.sh
+```bash
+curl localhost:8000/health
+# {"status":"ok","database":"ok"}
 ```
 
-To test your newly deployed code:
+Interactive documentation is at <http://localhost:8000/docs>, and the OpenAPI
+document at <http://localhost:8000/openapi.json>.
 
-```sh
-# Example: Get all records for {{service-name}}
-curl -X GET https://{API_BASE_URL}/api/{{service-name}} \
-     -H "Content-Type: application/json"
+## Postman
+
+Two collections and an environment live in [`postman/`](./postman/), with
+their own [README](./postman/README.md):
+
+| File | Purpose |
+| --- | --- |
+| `ACME-Incident-API.postman_collection.json` | Every endpoint, for exploring by hand. 53 requests. |
+| `ACME-Incident-API.regression.postman_collection.json` | An ordered run with assertions. 74 requests, 163 assertions. |
+| `Local.postman_environment.json` | `baseUrl` and the seed accounts. |
+
+Import all three, then select the environment.
+
+1. **Import** in Postman, choose the file.
+2. Open **Auth / login** and send it. A test script captures the token into the
+   collection variable `token`; every other request inherits it through the
+   collection's bearer auth, so there is nothing to paste.
+3. To switch persona, change the email in the login body and send it again.
+
+Seed accounts, all with the password `Passw0rd!`:
+
+| Email | Role |
+| --- | --- |
+| `admin@acme.inc` | admin |
+| `eng.hvac@acme.inc` | engineer |
+| `asha@acme.inc` | employee |
+
+Worth trying: send `GET /api/incidents` as each of the three. The same URL
+returns every incident to an administrator, only their own reports to an
+employee, and only their assignments to an engineer. Scope is decided on the
+server, in one place.
+
+Path ids such as `incidentId` and `buildingId` are collection variables, set
+once under the collection's **Variables** tab rather than edited per request.
+
+Postman can also import <http://localhost:8000/openapi.json> directly, but that
+gives you bare requests with no auth wiring or example bodies.
+
+## Tests
+
+```bash
+bash tests/api_test.sh
 ```
 
-Replace `{{service-name}}` with corresponding service name
-(e.g. `python-service`).
+97 checks against a running API and a real database: every endpoint, the role
+matrix for all three personas, the workflow transition rules, and the rejection
+cases. It is idempotent — each run creates uniquely named records and cleans up
+the incidents it made.
 
-To tail logs in real-time:
+It tests over HTTP rather than through mocks, so it exercises the constraints
+in the database as well as the code above them.
 
-```sh
-# Example: Get logs for {{service-name}}
-aws logs tail /aws/lambda/{{function-name}} \
-    --follow --format short --color on
-```
+The Postman regression collection covers the same ground with assertions on
+response bodies. Both run in CI on every push; see [continuous integration and
+deployment](../docs/ci-cd.md).
 
-Replace `{{function-name}}` with corresponding service name
-(e.g. `coding-workshop-python-service-abcd1234`).
+## Environment variables
 
-## Clean Up
+| Variable | Purpose | Local default |
+| --- | --- | --- |
+| `POSTGRES_HOST` | Database host | `localhost` |
+| `POSTGRES_PORT` | Database port | `5432` |
+| `POSTGRES_NAME` | Database name | `acme_incidents` |
+| `POSTGRES_USER` | Database user | `acme` |
+| `POSTGRES_PASS` | Database password | *(required)* |
+| `JWT_SECRET` | Token signing key, 32 characters or more | *(required)* |
+| `ACCESS_TOKEN_TTL_MINUTES` | Token lifetime | `60` |
+| `CORS_ORIGINS` | Origins allowed to call the API | localhost 3000 and 5173 |
+| `IS_LOCAL` | `false` adds `sslmode=require` to the connection | `true` |
+| `LOG_LEVEL` | Logging level | `INFO` |
 
-To remove all deployed resources (including backend):
+The names match what `infra/locals.tf` injects into the Lambda environment, so
+the deployed service reads the same configuration without a translation layer.
 
-```sh
-./bin/cleanup-environment.sh
-```
+## Endpoints
 
-This will remove all AWS resources such as Lambda functions, CloudFront distributions, and much more.
+| Group | Endpoints |
+| --- | --- |
+| Auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` |
+| Facilities | CRUD for `/buildings`, `/floors`, `/seats`, plus `GET /facilities/tree` |
+| Categories | CRUD for `/categories` |
+| Engineers | CRUD for `/engineers`, `PATCH /engineers/me/availability` |
+| Incidents | CRUD for `/incidents`, plus `/similar` and `/{id}/timeline` |
+| Workflow | `/{id}/assign`, `/{id}/status`, `/{id}/priority`, `/{id}/escalation`, `/{id}/escalation/decision` |
+| Notes | `/incidents/{id}/notes`, `PATCH` and `DELETE` on `/notes/{id}` |
+| Reports | `/dashboard/summary` and six reports under `/reports` |
 
-**Warning**: This removes all infra resources. Cannot be undone.
+Each workflow transition is its own endpoint rather than a `PATCH` on `status`.
+They carry different permissions, different required fields and different audit
+entries, so one endpoint would be a switch statement behind a REST facade.
+
+Every report under `/reports` answers one of the seven business questions in
+the root README.
+
+Full reference, conventions and the reasoning behind them:
+[docs/api-design.md](../docs/api-design.md).
