@@ -206,6 +206,12 @@ class IncidentSummary(ApiResponse):
     seat_code: str | None = None
     reporter_name: str
     assignee_name: str | None = None
+    reporter_id: int
+    assignee_id: int | None = None
+    # Carried on the list row so the admin queue can show why a ticket needs
+    # attention without opening each one.
+    escalation_reason: str | None = None
+    blocked_reason: str | None = None
     note_count: int = 0
     created_at: datetime
     updated_at: datetime

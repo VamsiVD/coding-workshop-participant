@@ -2,11 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMediaQuery } from 'react-responsive';
 import {
   Alert, Box, Button, Checkbox, FormControl, FormControlLabel, FormHelperText, FormLabel,
-  MenuItem, OutlinedInput, Paper, Select, Stack, Typography,
+  MenuItem, OutlinedInput, Select, Typography,
 } from '@mui/material';
-import { crate, fonts } from '../../../theme/crateTheme';
+import { admin } from '../../../theme/adminTheme';
 import { incidentApi } from '../../../services/incidentApi';
-import FormSection, { labelSx } from './components/FormSection';
+import FormSection from './components/FormSection';
 import CategoryPicker from './components/CategoryPicker';
 import SegmentedChoice from './components/SegmentedChoice';
 import SimilarTickets from './components/SimilarTickets';
@@ -14,14 +14,15 @@ import SummaryPanel from './components/SummaryPanel';
 import SubmittedCard from './components/SubmittedCard';
 import { SCOPE, WORKING, floorLabel, groupCategories, suggestPriority, validateIncident } from './incidentModel';
 
+// Tag colours for the suggested priority.
 const PRIORITY = {
-  Low: [crate.field, crate.ink],
-  Medium: [crate.wood, crate.ink],
-  High: [crate.ink, crate.paper],
-  Critical: [crate.red, crate.paper],
+  Low: ['#ede3cf', '#4a3b2c'],
+  Medium: ['#f3e6c8', admin.brown],
+  High: [admin.brown, admin.surface],
+  Critical: [admin.red, '#fff'],
 };
 
-const inputSx = { '& .MuiOutlinedInput-input': { py: '9px', px: '10px', fontSize: 14.5 } };
+const inputSx = { bgcolor: admin.bg, '& .MuiOutlinedInput-input': { py: '9px', px: '12px', fontSize: 14.5 } };
 
 const emptyForm = () => ({
   buildingId: '',
@@ -44,12 +45,12 @@ const withImpact = (description, scope, working, priority) =>
 function Field({ id, label, optional, error, children }) {
   return (
     <FormControl fullWidth error={Boolean(error)}>
-      <FormLabel htmlFor={id} sx={{ mb: 0.625 }}>
+      <FormLabel htmlFor={id} sx={{ mb: 0.75, fontSize: 13, color: admin.muted, '&.Mui-focused': { color: admin.muted } }}>
         {label}
-        {optional && <Box component="span" sx={{ ml: 0.75, textTransform: 'none', letterSpacing: 0, fontFamily: fonts.body, fontSize: 11.5, opacity: 0.7 }}>(optional)</Box>}
+        {optional && <Box component="span" sx={{ ml: 0.5, color: admin.faint }}>(optional)</Box>}
       </FormLabel>
       {children}
-      {error && <FormHelperText>{error}</FormHelperText>}
+      {error && <FormHelperText sx={{ mx: 0 }}>{error}</FormHelperText>}
     </FormControl>
   );
 }
@@ -136,29 +137,30 @@ export default function ReportIncidentPage({ showDuplicateCheck = true, showWork
   };
 
   const [pBg, pFg] = PRIORITY[priority];
+  const checkSx = { color: 'rgba(42,29,20,.35)', '&.Mui-checked': { color: admin.red }, p: 0, mr: 1.25 };
 
   return (
-    <Box component="main" sx={{ maxWidth: 1080, mx: 'auto', px: 2.5, pt: 3.5, pb: 7, display: 'grid', gap: 2.25 }}>
-      <Stack spacing={0.5}>
-        <Typography variant="overline" sx={{ color: crate.redDeep }}>New incident</Typography>
+    <Box component="main" sx={{ maxWidth: 1080, mx: 'auto', px: { xs: 2, sm: 3.5 }, pt: 4, pb: 8, display: 'grid', gap: 3 }}>
+      <div>
+        <Typography sx={{ fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase', color: admin.brown, mb: 0.5 }}>New incident</Typography>
         <Typography variant="h1">Report an incident</Typography>
-        <Typography variant="body1" sx={{ maxWidth: '60ch' }}>Tell us where and what. Follow progress from your dashboard until it’s resolved.</Typography>
-      </Stack>
+        <Typography sx={{ mt: 0.5, fontSize: 14, color: admin.muted }}>Tell us where and what. Follow progress from your dashboard until it’s resolved.</Typography>
+      </div>
 
       {ticket ? (
         <SubmittedCard ticket={ticket} location={location} onReportAnother={reset} />
       ) : (
-        <Box sx={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(0,1fr) 300px', gap: 2.5, alignItems: 'start' }}>
-          <Paper component="form" noValidate onSubmit={submit} elevation={0} sx={{ border: `2px solid ${crate.ink}`, boxShadow: `6px 6px 0 ${crate.ink}`, minWidth: 0 }}>
-            {(tried && errorCount > 0) && (
-              <Alert severity="error" sx={{ mx: 3, mt: 2.5 }}>
-                <b>{errorCount === 1 ? '1 field needs attention' : `${errorCount} fields need attention`}.</b> Fix the fields marked below.
+        <Box sx={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(0,1fr) 320px', gap: 3, alignItems: 'start' }}>
+          <Box component="form" noValidate onSubmit={submit} sx={{ display: 'grid', gap: 2, minWidth: 0 }}>
+            {tried && errorCount > 0 && (
+              <Alert severity="error" sx={{ borderRadius: '10px', border: '1px solid oklch(0.8 0.08 25)', bgcolor: 'oklch(0.96 0.02 25)', color: admin.dangerFg }}>
+                <b style={{ fontWeight: 500 }}>{errorCount === 1 ? '1 field needs attention' : `${errorCount} fields need attention`}.</b> Fix the fields marked below.
               </Alert>
             )}
-            {serverError && <Alert severity="error" sx={{ mx: 3, mt: 2.5 }}>{serverError}</Alert>}
+            {serverError && <Alert severity="error" sx={{ borderRadius: '10px' }}>{serverError}</Alert>}
 
             <FormSection number="01" title="Location">
-              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 1.75 }}>
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 170px), 1fr))', gap: 1.75 }}>
                 <Field id="building" label="Building" error={errors.buildingId}>
                   <Select id="building" value={form.buildingId} onChange={(e) => set('buildingId', e.target.value)} displayEmpty sx={inputSx}>
                     <MenuItem value="" disabled>Select building</MenuItem>
@@ -195,40 +197,42 @@ export default function ReportIncidentPage({ showDuplicateCheck = true, showWork
                   value={form.description}
                   onChange={(e) => set('description', e.target.value)}
                   inputProps={{ maxLength: 4800 }}
-                  sx={{ p: 0, '& textarea': { p: '10px', fontSize: 14.5, lineHeight: 1.5 } }}
+                  sx={{ bgcolor: admin.bg, p: 0, '& textarea': { p: '10px 12px', fontSize: 14.5, lineHeight: 1.5 } }}
                 />
               </Field>
-              <Box sx={{ mt: '-6px !important', fontSize: 12, textAlign: 'right' }}>{form.description.trim().length} / 20 min</Box>
+              <Box sx={{ mt: -1, fontSize: 12.5, color: admin.muted, textAlign: 'right' }}>{form.description.trim().length} / 20 min</Box>
             </FormSection>
 
             <FormSection number="03" title="Impact">
-              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 1.75 }}>
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: 2 }}>
                 <SegmentedChoice id="scope" label="Who is affected?" options={SCOPE} value={form.scope} onChange={(v) => set('scope', v)} />
                 <SegmentedChoice id="working" label="Can you keep working?" options={WORKING} value={form.working} onChange={(v) => set('working', v)} />
               </Box>
-              <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap sx={{ fontSize: 12.5 }}>
-                <Box component="span" sx={labelSx}>Suggested priority</Box>
-                <Box component="span" sx={{ fontFamily: fonts.heading, fontWeight: 600, fontSize: 11.5, letterSpacing: '.14em', textTransform: 'uppercase', px: 1.125, py: 0.375, border: `1.5px solid ${crate.ink}`, bgcolor: pBg, color: pFg }}>{priority}</Box>
+              <Box sx={{ display: 'flex', gap: 1.25, alignItems: 'center', flexWrap: 'wrap', fontSize: 13, color: admin.muted }}>
+                <span>Suggested priority</span>
+                <Box component="span" sx={{ px: 1.25, py: 0.25, borderRadius: 999, fontSize: 12, fontWeight: 500, bgcolor: pBg, color: pFg }}>{priority}</Box>
                 <span>A facility admin sets the priority when assigning.</span>
-              </Stack>
-              <FormControlLabel
-                sx={{ alignItems: 'flex-start', m: 0 }}
-                control={<Checkbox checked={form.escalate} onChange={(e) => set('escalate', e.target.checked)} />}
-                label={<Box component="span" sx={{ fontSize: 13.5, lineHeight: 1.45 }}><b>Request escalation</b> for safety risks or when a team can’t work. Reviewed by an admin.</Box>}
-              />
+              </Box>
+              <Box sx={{ borderTop: `1px solid ${admin.line}`, pt: 1.75 }}>
+                <FormControlLabel
+                  sx={{ alignItems: 'flex-start', m: 0 }}
+                  control={<Checkbox checked={form.escalate} onChange={(e) => set('escalate', e.target.checked)} sx={{ ...checkSx, mt: '1px' }} />}
+                  label={<Box component="span" sx={{ fontSize: 14, lineHeight: 1.45 }}><Box component="span" sx={{ fontWeight: 500 }}>Request escalation</Box> <Box component="span" sx={{ color: admin.muted }}>for safety risks or when a team can’t work. Reviewed by an admin.</Box></Box>}
+                />
+              </Box>
               {form.escalate && (
-                <Box sx={{ pl: 3.5 }}>
+                <Box sx={{ pl: 4 }}>
                   <Field id="escalateReason" label="Reason for escalation" error={errors.escalateReason}>
-                    <OutlinedInput id="escalateReason" autoFocus placeholder="e.g. Exposed wiring near desks, 20 people on this floor" value={form.escalateReason} onChange={(e) => set('escalateReason', e.target.value)} inputProps={{ maxLength: 2000 }} sx={{ ...inputSx, '& .MuiOutlinedInput-notchedOutline': { borderColor: `${crate.red} !important` } }} />
+                    <OutlinedInput id="escalateReason" autoFocus placeholder="e.g. Exposed wiring near desks, 20 people on this floor" value={form.escalateReason} onChange={(e) => set('escalateReason', e.target.value)} inputProps={{ maxLength: 2000 }} sx={{ ...inputSx, '& .MuiOutlinedInput-notchedOutline': { borderColor: `${admin.red} !important` } }} />
                   </Field>
                 </Box>
               )}
             </FormSection>
 
-            <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap sx={{ px: 3, py: 2, bgcolor: crate.tint, borderTop: `2px solid ${crate.ink}` }}>
-              <Button type="submit" variant="contained" disabled={submitting} sx={{ minHeight: 46 }}>{submitting ? 'Submitting…' : 'Submit incident'}</Button>
-            </Stack>
-          </Paper>
+            <Box sx={{ py: 0.5 }}>
+              <Button type="submit" variant="contained" size="large" disabled={submitting} sx={{ px: 3.25, whiteSpace: 'nowrap' }}>{submitting ? 'Submitting…' : 'Submit incident'}</Button>
+            </Box>
+          </Box>
 
           <SummaryPanel
             location={location || '—'}

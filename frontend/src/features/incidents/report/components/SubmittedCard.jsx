@@ -1,34 +1,39 @@
-import { Alert, Box, Button, Link, Paper, Stack } from '@mui/material';
+import { Alert, Box, Button, Paper, Typography } from '@mui/material';
+import CheckIcon from '@mui/icons-material/Check';
+import { admin } from '../../../../theme/adminTheme';
 import { dashboardHref } from '../../../dashboard/ticketModel';
-import { crate, fonts } from '../../../../theme/crateTheme';
-
-const dt = { fontFamily: fonts.heading, fontWeight: 500, fontSize: 12, letterSpacing: '.12em', textTransform: 'uppercase', pt: '2px' };
 
 export default function SubmittedCard({ ticket, location, onReportAnother }) {
   const escalated = ticket.escalated === true;
   return (
-    <Paper elevation={0} sx={{ maxWidth: 680, border: `2px solid ${crate.ink}`, boxShadow: `6px 6px 0 ${crate.ink}`, p: { xs: 2.5, sm: '28px 32px' } }}>
-      <Stack spacing={2.25}>
-        <Box sx={{ alignSelf: 'flex-start', border: `3px double ${crate.red}`, color: crate.red, px: 1.75, py: 0.625, fontFamily: fonts.stencil, fontWeight: 900, fontSize: 22, letterSpacing: '.16em' }}>SUBMITTED</Box>
-        <Box sx={{ fontFamily: fonts.heading, fontWeight: 600, fontSize: 26, letterSpacing: '.04em' }}>Ticket {ticket.ref}</Box>
-        <Box component="dl" sx={{ m: 0, display: 'grid', gridTemplateColumns: 'max-content minmax(0,1fr)', gap: '8px 24px', borderTop: `2px solid ${crate.ink}`, borderBottom: `2px solid ${crate.ink}`, py: 1.5, fontSize: 14 }}>
-          <Box component="dt" sx={dt}>Status</Box><Box component="dd" sx={{ m: 0 }}>{ticket.status}</Box>
-          <Box component="dt" sx={dt}>Location</Box><Box component="dd" sx={{ m: 0 }}>{location}</Box>
-          <Box component="dt" sx={dt}>Priority</Box><Box component="dd" sx={{ m: 0 }}>{ticket.priority}{escalated ? ' · escalation requested' : ''}</Box>
-        </Box>
-        {ticket.escalated === null && (
-          <Alert severity="error">The ticket was created, but the escalation request failed. Request it again from the ticket.</Alert>
-        )}
-        <Box sx={{ fontSize: 14, lineHeight: 1.55 }}>
-          {escalated
-            ? 'Your escalation request is with a facility admin for review.'
-            : 'A facility admin will assign an engineer. Follow progress and add notes from your dashboard.'}
-        </Box>
-        <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
-          <Button variant="contained" href={dashboardHref(ticket.ref)}>Track this ticket</Button>
-          <Link component="button" type="button" onClick={onReportAnother} sx={{ fontSize: 13 }}>Report another incident</Link>
-        </Stack>
-      </Stack>
+    <Paper elevation={0} role="status" sx={{ maxWidth: 640, border: `1px solid ${admin.line}`, borderRadius: '16px', bgcolor: admin.surface, p: '28px 28px 24px', display: 'grid', gap: 2.25 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <Box sx={{ width: 40, height: 40, borderRadius: '50%', bgcolor: admin.sand, color: admin.red, display: 'grid', placeItems: 'center' }}><CheckIcon /></Box>
+        <div>
+          <Typography sx={{ fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase', color: admin.brown }}>Submitted</Typography>
+          <Typography variant="h2" sx={{ fontSize: 26 }}>Ticket {ticket.ref}</Typography>
+        </div>
+      </Box>
+      <Box component="dl" sx={{ m: 0, display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, minmax(0,1fr))' }, gap: 1.75, fontSize: 14, borderTop: `1px solid ${admin.line}`, borderBottom: `1px solid ${admin.line}`, py: 1.75 }}>
+        {[['Status', ticket.status], ['Location', location], ['Priority', escalated ? `${ticket.priority} · escalation requested` : ticket.priority]].map(([k, v]) => (
+          <div key={k}>
+            <Box component="dt" sx={{ fontSize: 12, color: admin.muted }}>{k}</Box>
+            <Box component="dd" sx={{ m: 0 }}>{v}</Box>
+          </div>
+        ))}
+      </Box>
+      {ticket.escalated === null && (
+        <Alert severity="error" sx={{ borderRadius: '10px' }}>The ticket was created, but the escalation request failed. Request it again from the ticket.</Alert>
+      )}
+      <Typography sx={{ fontSize: 14, lineHeight: 1.55, color: '#4a3b2c' }}>
+        {escalated
+          ? 'Your escalation request is with a facility admin for review.'
+          : 'A facility admin will assign an engineer. Follow progress and add notes from your dashboard.'}
+      </Typography>
+      <Box sx={{ display: 'flex', gap: 1.25, flexWrap: 'wrap' }}>
+        <Button variant="contained" href={dashboardHref(ticket.ref)}>Track this ticket</Button>
+        <Button variant="outlined" color="secondary" onClick={onReportAnother} sx={{ bgcolor: admin.bg }}>Report another</Button>
+      </Box>
     </Paper>
   );
 }

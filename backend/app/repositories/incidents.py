@@ -21,6 +21,7 @@ SORT_COLUMNS = {
 _SUMMARY_SELECT = """
     SELECT i.id, i.title, i.status, i.priority, i.escalation_status, i.is_escalated,
            i.created_at, i.updated_at,
+           i.reporter_id, i.assignee_id, i.escalation_reason, i.blocked_reason,
            c.id AS category_id, c.label AS category_label,
            c.category_type AS category_type,
            b.name AS building_name,
