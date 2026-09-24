@@ -45,7 +45,12 @@ def _check_location(conn: Connection, payload: RegisterRequest) -> None:
     if payload.seat_id is not None:
         seat = facilities_repo.get_seat(conn, payload.seat_id)
         if seat is None or seat["floor_id"] != payload.floor_id:
-            message = "That desk or room is not on the chosen floor."
+            message = "That desk is not on the chosen floor."
+            raise ValidationError(message, {"seat_id": message})
+        # Rooms are places problems happen, not where someone sits; they are
+        # chosen when reporting an incident, not at registration.
+        if seat["kind"] != "desk":
+            message = "Choose a desk. Rooms are chosen when reporting a problem."
             raise ValidationError(message, {"seat_id": message})
 
 

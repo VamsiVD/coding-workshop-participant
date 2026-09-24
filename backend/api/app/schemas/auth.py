@@ -34,7 +34,7 @@ class RegisterRequest(ApiModel):
     full_name: str = Field(min_length=1, max_length=120)
     # Where the employee works. Optional here so API clients that predate it
     # keep working; the registration form asks for building and floor. The
-    # seat may be a desk or a room.
+    # seat must be a desk; rooms are for incident reports.
     building_id: int | None = None
     floor_id: int | None = None
     seat_id: int | None = None
@@ -47,7 +47,7 @@ class RegisterRequest(ApiModel):
         if self.floor_id is not None and self.building_id is None:
             raise ValueError("Choose a building for this floor.")
         if self.seat_id is not None and self.floor_id is None:
-            raise ValueError("Choose a floor for this desk or room.")
+            raise ValueError("Choose a floor for this desk.")
         return self
 
     @field_validator("email")

@@ -5,6 +5,11 @@
 // Options for the two impact questions, ordered from least to most severe.
 // The order matters: suggestPriority() scores answers by their index.
 export const SCOPE = ['Just me', 'My area', 'Whole floor'];
+
+// "Where is the problem?" label -> which seats the picker lists. A room is a
+// kind of seat, so a problem in a conference room is saved like one at a desk.
+export const SPOT = { 'At a desk': 'desk', 'In a room': 'room', 'Elsewhere on the floor': 'floor' };
+export const SPOT_LABEL = Object.fromEntries(Object.entries(SPOT).map(([label, kind]) => [kind, label]));
 export const WORKING = ['Yes', 'Partly', 'Not at all'];
 
 // Mirrors the backend's workflow: an admin assigns, the engineer resolves,
@@ -45,12 +50,15 @@ export function suggestPriority(scope, working) {
 }
 
 // [CONCEPT: Form validation] Returns { field: message } for each invalid field;
-// an empty object means the form can be submitted. Seat is optional, and the
-// escalation reason is only required when escalation is requested.
+// an empty object means the form can be submitted. A desk or room is needed
+// only when "At a desk" or "In a room" is chosen, and the escalation reason
+// only when escalation is requested.
 export function validateIncident(f) {
   const e = {};
   if (!f.buildingId) e.buildingId = 'Select a building.';
   if (!f.floorId) e.floorId = 'Select a floor.';
+  if (f.spotKind === 'desk' && !f.seatId) e.seatId = 'Select the desk, or choose “Elsewhere on the floor”.';
+  if (f.spotKind === 'room' && !f.seatId) e.seatId = 'Select the room, or choose “Elsewhere on the floor”.';
   if (!f.categoryId) e.categoryId = 'Choose the closest category.';
   if (f.title.trim().length < 3) e.title = 'Add a short title (at least 3 characters).';
   if (f.description.trim().length < 20) e.description = 'At least 20 characters, please.';

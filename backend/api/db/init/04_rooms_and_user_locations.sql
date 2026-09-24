@@ -4,9 +4,10 @@
 -- `code` ("Condor"), and incidents already point at seats, so an incident in
 -- a meeting room needs nothing new. `kind` tells desks and rooms apart.
 --
--- Users gain an optional workplace (building, floor, desk or room), captured at
+-- Users gain an optional workplace (building, floor, desk), captured at
 -- registration. The same composite keys as incidents keep it consistent: the
--- floor must be in the building and the seat on the floor.
+-- floor must be in the building and the seat on the floor. That the seat is a
+-- desk rather than a room is checked by the registration service.
 --
 -- Every statement is idempotent; migrate.py runs this file on every invocation
 -- (see 03_assignment_requests.sql).

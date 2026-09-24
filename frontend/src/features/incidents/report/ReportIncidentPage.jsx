@@ -15,7 +15,7 @@ import SegmentedChoice from './components/SegmentedChoice';
 import SimilarTickets from './components/SimilarTickets';
 import SummaryPanel from './components/SummaryPanel';
 import SubmittedCard from './components/SubmittedCard';
-import { SCOPE, WORKING, floorLabel, groupCategories, suggestPriority, validateIncident } from './incidentModel';
+import { SCOPE, SPOT, SPOT_LABEL, WORKING, floorLabel, groupCategories, suggestPriority, validateIncident } from './incidentModel';
 
 // Tag colours for the suggested priority.
 const PRIORITY = {
@@ -35,6 +35,8 @@ const inputSx = { bgcolor: admin.bg, '& .MuiOutlinedInput-input': { py: '9px', p
 const emptyForm = () => ({
   buildingId: '',
   floorId: '',
+  // 'desk' | 'room' | 'floor': where on the floor the problem is.
+  spotKind: 'floor',
   seatId: '',
   categoryId: '',
   title: '',
@@ -126,7 +128,12 @@ export default function ReportIncidentPage({ showDuplicateCheck = true, showWork
   const category = categories.find((c) => c.id === form.categoryId);
   const priority = suggestPriority(form.scope, form.working);
   // e.g. "HQ North · Level 3 · HQ1-3F-A14"; missing parts are skipped.
-  const location = [building?.name, floor && floorLabel(floor), seat?.code].filter(Boolean).join(' · ');
+  const location = [building?.name, floor && floorLabel(floor), seat && (seat.kind === 'room' ? `${seat.code} (room)` : seat.code)]
+    .filter(Boolean).join(' · ');
+  // [CONCEPT: Derived state] Only the desks or only the rooms on the chosen floor.
+  // A seat without a kind (older data, mocks) counts as a desk.
+  const spots = (floor?.seats ?? []).filter((x) => (x.kind ?? 'desk') === form.spotKind);
+  const spotNoun = form.spotKind === 'room' ? 'room' : 'desk';
   const errorCount = useMemo(() => Object.keys(errors).length, [errors]);
 
   // One change handler for every field. Changing the building clears floor and
@@ -139,7 +146,7 @@ export default function ReportIncidentPage({ showDuplicateCheck = true, showWork
     setForm((f) => {
       const next = { ...f, [field]: value };
       if (field === 'buildingId') { next.floorId = ''; next.seatId = ''; }
-      if (field === 'floorId') next.seatId = '';
+      if (field === 'floorId' || field === 'spotKind') next.seatId = '';
       if (tried) setErrors(validateIncident(next));
       return next;
     });
@@ -180,7 +187,7 @@ export default function ReportIncidentPage({ showDuplicateCheck = true, showWork
 
   const reset = () => {
     // Keep the location: a second report is usually from the same place.
-    setForm((f) => ({ ...emptyForm(), buildingId: f.buildingId, floorId: f.floorId, seatId: f.seatId }));
+    setForm((f) => ({ ...emptyForm(), buildingId: f.buildingId, floorId: f.floorId, spotKind: f.spotKind, seatId: f.seatId }));
     setErrors({});
     setTried(false);
     setTicket(null);
@@ -231,14 +238,18 @@ export default function ReportIncidentPage({ showDuplicateCheck = true, showWork
                     {(building?.floors ?? []).map((f) => <MenuItem key={f.id} value={f.id}>{floorLabel(f)}</MenuItem>)}
                   </Select>
                 </Field>
-                <Field id="seat" label="Desk or room" optional>
-                  <Select id="seat" value={form.seatId} onChange={(e) => set('seatId', e.target.value)} displayEmpty disabled={!floor?.seats.length} sx={inputSx}>
-                    <MenuItem value="">{floor?.seats.length ? 'Not at a desk or room' : 'No desks or rooms listed'}</MenuItem>
-                    {/* Rooms share the list with desks (a room is a kind of seat), so they are labelled. */}
-                    {(floor?.seats ?? []).map((x) => <MenuItem key={x.id} value={x.id}>{x.kind === 'room' ? `${x.code} (room)` : x.code}</MenuItem>)}
+              </Box>
+              {/* Where on the floor: a desk, a room (e.g. a conference room), or neither. */}
+              <SegmentedChoice id="spot-kind" label="Where is the problem?" options={Object.keys(SPOT)} value={SPOT_LABEL[form.spotKind]} onChange={(v) => set('spotKind', SPOT[v])} />
+              {/* [CONCEPT: Conditional rendering] The picker only appears for a desk or a room, and lists just those. */}
+              {form.spotKind !== 'floor' && (
+                <Field id="seat" label={form.spotKind === 'room' ? 'Room' : 'Desk'} error={errors.seatId}>
+                  <Select id="seat" value={form.seatId} onChange={(e) => set('seatId', e.target.value)} displayEmpty disabled={!spots.length} sx={inputSx}>
+                    <MenuItem value="" disabled>{!floor ? 'Choose a floor first' : spots.length ? `Select ${spotNoun}` : `No ${spotNoun}s listed on this floor`}</MenuItem>
+                    {spots.map((x) => <MenuItem key={x.id} value={x.id}>{x.code}</MenuItem>)}
                   </Select>
                 </Field>
-              </Box>
+              )}
               {/* Renders nothing when there are no open tickets on the chosen floor. */}
               <SimilarTickets tickets={similar} mine={mine} />
             </FormSection>

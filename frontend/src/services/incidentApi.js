@@ -11,7 +11,7 @@ const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 const api = {
-  // -> [{ id, name, code, floors: [{ id, level, label, seats: [{ id, code }] }] }]
+  // -> [{ id, name, code, floors: [{ id, level, label, seats: [{ id, code, kind: 'desk' | 'room' }] }] }]
   listBuildings: async () => (await request('/facilities/tree')).buildings,
   // -> [{ id, label, category_type }]
   listCategories: () => request('/categories'),
@@ -46,7 +46,7 @@ const api = {
 // [CONCEPT: Mock data] Small fixed data set; floor 12 (HQ North, Level 3) returns open tickets to show the duplicate check.
 const wait = (ms = 250) => new Promise((r) => setTimeout(r, ms));
 const MOCK_BUILDINGS = [
-  { id: 1, name: 'HQ North', code: 'HQ1', floors: [{ id: 11, level: 0, label: 'Ground Floor', seats: [] }, { id: 12, level: 3, label: 'Level 3', seats: [{ id: 101, code: 'HQ1-3F-A14' }] }] },
+  { id: 1, name: 'HQ North', code: 'HQ1', floors: [{ id: 11, level: 0, label: 'Ground Floor', seats: [] }, { id: 12, level: 3, label: 'Level 3', seats: [{ id: 101, code: 'HQ1-3F-A14', kind: 'desk' }, { id: 102, code: 'Condor', kind: 'room' }] }] },
   { id: 2, name: 'Riverside Annex', code: 'RA1', floors: [{ id: 21, level: 0, label: 'Ground Floor', seats: [] }] },
 ];
 const MOCK_CATEGORIES = [

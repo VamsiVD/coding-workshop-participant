@@ -1,5 +1,5 @@
 // Registration wizard (/register): step 0 account details, step 1 workspace
-// (building, floor, desk or room), step 2 verify email, then a "done" screen. This page owns all wizard state (current step, form
+// (building, floor, desk), step 2 verify email, then a "done" screen. This page owns all wizard state (current step, form
 // values, errors) and passes it down to the step components as props.
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Box, LinearProgress, Typography } from '@mui/material';
@@ -15,7 +15,7 @@ import DoneStep from './steps/DoneStep';
 
 const STEPS = [
   { label: 'Account details', sub: 'Name, email, password' },
-  { label: 'Your workspace', sub: 'Building, floor, desk or room' },
+  { label: 'Your workspace', sub: 'Building, floor, desk' },
   { label: 'Verify email', sub: 'One-time code' },
 ];
 const WORKSPACE = 1;
@@ -28,7 +28,7 @@ const DONE = STEPS.length;
 // blurb is null because it is built from the email address at render time.
 const COPY = [
   { title: 'Create your account', blurb: 'Use your ACME work email. Accounts are for employees only.' },
-  { title: 'Where do you work?', blurb: 'Pick your building and floor, and your desk or meeting room if you have one.' },
+  { title: 'Where do you work?', blurb: 'Pick your building and floor, and your desk if you have a fixed one.' },
   { title: 'Verify your email', blurb: null },
   { title: 'Your account is ready', blurb: 'Sign in to report and track incidents.' },
 ];
@@ -43,10 +43,10 @@ const SERVER_FIELDS = {
 // Errors on these belong to step 0, so the wizard goes back there to show them.
 const DETAIL_FIELDS = new Set(['firstName', 'email', 'password']);
 
-// spotKind: 'desk' | 'room' | 'none'. Ids stay '' until chosen, which is what MUI's Select expects.
+// Ids stay '' until chosen, which is what MUI's Select expects.
 const EMPTY_FORM = {
   firstName: '', lastName: '', email: '', password: '', acceptedPolicy: false,
-  buildingId: '', floorId: '', spotKind: 'desk', seatId: '',
+  buildingId: '', floorId: '', seatId: '',
 };
 
 export default function RegisterPage() {
@@ -144,7 +144,7 @@ export default function RegisterPage() {
         password: form.password,
         buildingId: form.buildingId,
         floorId: form.floorId,
-        seatId: form.spotKind === 'none' ? null : form.seatId,
+        seatId: form.seatId || null,
       });
       setStep(VERIFY);
     });
