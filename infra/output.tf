@@ -45,3 +45,18 @@ output "jupyter_url" {
   description = "The URL of the JupyterHub instance"
   value       = data.aws_caller_identity.this.id == "000000000000" ? "http://localhost:8888" : try(one(aws_eks_cluster.this.*.endpoint), null)
 }
+
+output "rds_cluster_arn" {
+  description = "The ARN of the Aurora cluster (for the RDS Data API)"
+  value       = try(one(aws_rds_cluster.this.*.arn), null)
+}
+
+output "rds_secret_arn" {
+  description = "The ARN of the Secrets Manager secret holding the Aurora credentials"
+  value       = try(one(aws_secretsmanager_secret.rds.*.arn), null)
+}
+
+output "rds_database_name" {
+  description = "The name of the Aurora database"
+  value       = try(one(aws_rds_cluster.this.*.database_name), null)
+}

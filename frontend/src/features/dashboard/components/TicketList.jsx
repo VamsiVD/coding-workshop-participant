@@ -1,9 +1,13 @@
+// "My tickets" list on the employee dashboard: filter toggles, a search box
+// and one clickable row per ticket. Filter and search state live in the page;
+// this component just displays them and reports changes.
 import { Box, Chip, InputAdornment, Link, TextField, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import { admin } from '../../../theme/adminTheme';
 import { flowBars, timeAgo } from '../ticketModel';
 import StatusChip from './StatusChip';
 
+// [value, label] pairs; the values match the FILTERS keys in DashboardPage.
 const FILTERS = [['active', 'Active'], ['resolved', 'Resolved'], ['all', 'All']];
 
 // Closed/resolved tickets read better dated by when that happened, not by
@@ -15,11 +19,13 @@ function updatedLabel(t) {
   return `Updated ${timeAgo(t.updatedAt)}`;
 }
 
+// [CONCEPT: Lifting state up] No state of its own: filter/query arrive as props and changes go back via onFilterChange/onQueryChange.
 export default function TicketList({ tickets, filter, onFilterChange, query, onQueryChange, onOpen }) {
   return (
     <Box component="section" id="tickets" sx={{ border: `1px solid ${admin.line}`, borderRadius: '12px', overflow: 'hidden', bgcolor: admin.surface }}>
       <Box sx={{ p: '12px 16px', borderBottom: `1px solid ${admin.line}`, display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
         <Typography variant="h2" sx={{ mr: 1 }}>My tickets</Typography>
+        {/* [CONCEPT: MUI component] Exclusive ToggleButtonGroup; `v &&` ignores the null sent when the selected button is clicked again. */}
         <ToggleButtonGroup
           exclusive
           size="small"
@@ -30,18 +36,22 @@ export default function TicketList({ tickets, filter, onFilterChange, query, onQ
         >
           {FILTERS.map(([v, l]) => <ToggleButton key={v} value={v}>{l}</ToggleButton>)}
         </ToggleButtonGroup>
-        <TextField
+        {/* [CONCEPT: Controlled input] Controlled by the parent: value is `query`, and typing calls onQueryChange. */}
+        <TextField slotProps={{ htmlInput: { 'aria-label': 'Search my tickets' }, input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }}
           size="small"
           placeholder="Search my tickets"
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
-          inputProps={{ 'aria-label': 'Search my tickets' }}
+         
           sx={{ ml: 'auto', flex: '0 1 260px', minWidth: 0, '& .MuiOutlinedInput-root': { bgcolor: admin.bg } }}
-          InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
+         
         />
       </Box>
 
+      {/* [CONCEPT: List rendering and keys] One row per ticket, keyed by its unique ref. */}
       {tickets.map((t) => (
+        // [CONCEPT: Accessibility] A div acting as a button: role, tabIndex and an Enter/Space key handler make it
+        // keyboard-usable (preventDefault stops Space from scrolling the page).
         <Box
           key={t.ref}
           role="button"
@@ -61,6 +71,7 @@ export default function TicketList({ tickets, filter, onFilterChange, query, onQ
             <Box sx={{ fontSize: 12.5, color: admin.muted }}>{[t.category, t.engineer ?? 'Unassigned', updatedLabel(t)].join(' · ')}</Box>
           </Box>
           <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+            {/* [CONCEPT: Conditional rendering] The unread badge appears only when there is something new. */}
             {t.unreadCount > 0 && <Chip label={`${t.unreadCount} new`} sx={{ bgcolor: admin.red, color: '#fff' }} />}
             <Box sx={{ minWidth: 96 }}><StatusChip status={t.status} /></Box>
           </Box>
@@ -69,6 +80,7 @@ export default function TicketList({ tickets, filter, onFilterChange, query, onQ
 
       {tickets.length === 0 && (
         <Box sx={{ py: 5, px: 2, textAlign: 'center', fontSize: 14, color: admin.muted }}>
+          {/* [CONCEPT: Client-side routing] A plain href: App.jsx picks the page from window.location, so this does a full page load. */}
           No tickets here. <Link href="/incidents/new">Report an incident</Link>
         </Box>
       )}

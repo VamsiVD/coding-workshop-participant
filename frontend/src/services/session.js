@@ -1,10 +1,14 @@
 // Keeps the bearer token from POST /auth/login. "Remember me" puts it in
 // localStorage (survives a browser restart); otherwise sessionStorage (ends
 // with the tab). The token's own expiry still applies either way.
+// Used by LoginPage (save), http.js (read token, clear on 401) and App.jsx (route guard, sign-out).
+// [CONCEPT: Browser storage] The session is a JSON string under one key in local- or sessionStorage.
 const KEY = 'coyote.session';
 
 const stores = () => [window.localStorage, window.sessionStorage];
 
+// expiresIn is in seconds (from the login response); it is stored as an absolute time in ms.
+// Clears first so an old session in the other store cannot linger.
 export function saveSession({ accessToken, expiresIn, user }, { remember }) {
   clearSession();
   const session = { accessToken, user, expiresAt: Date.now() + expiresIn * 1000 };
@@ -12,6 +16,8 @@ export function saveSession({ accessToken, expiresIn, user }, { remember }) {
   return session;
 }
 
+// Returns { accessToken, user, expiresAt } or null. Expired sessions count as signed out
+// (they are ignored here, not deleted). Checks localStorage first, then sessionStorage.
 export function getSession() {
   for (const store of stores()) {
     try {

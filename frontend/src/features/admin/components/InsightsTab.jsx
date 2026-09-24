@@ -1,3 +1,6 @@
+// Insights tab of the admin console: KPI tiles, a status breakdown bar, and
+// panels for hotspots, top categories and engineer workload. Read-only; all
+// numbers come from the building-filtered incidents plus the server KPIs.
 import { Box } from '@mui/material';
 import { admin } from '../../../theme/adminTheme';
 import { CAPACITY, STATUS_BAR, insights } from '../adminModel';
@@ -9,20 +12,27 @@ const versus = (v, target, targetLabel) => (v == null ? 'Nothing measured yet' :
 const tone = (v, target) => (v == null ? admin.muted : v <= target ? admin.brown : admin.dangerFg);
 
 export default function InsightsTab({ incidents, engineers, kpis }) {
+  // [CONCEPT: Derived state] All chart data is recomputed from props on each render by a pure helper; nothing is stored.
   const { hotspots, repeatSeats, categories, byStatus, workload, updatedWithin24hPct } = insights(incidents, engineers);
+  // Time KPIs come from the server for all incidents, so they do not follow the building filter.
   const k = kpis || {};
+  // Tile config as data, rendered by one map below. The targets are minutes and days; the ack target is shown in hours.
   const tiles = [
     { label: 'Time to acknowledge', value: fmt(k.ackMinutes, 'm'), note: versus(k.ackMinutes, k.ackTargetMinutes, `${k.ackTargetMinutes / 60}h`), color: tone(k.ackMinutes, k.ackTargetMinutes) },
     { label: 'Time to resolve', value: fmt(k.resolveDays, 'd'), note: versus(k.resolveDays, k.resolveTargetDays, `${k.resolveTargetDays}d`), color: tone(k.resolveDays, k.resolveTargetDays) },
     { label: 'Updated within 24h', value: fmt(updatedWithin24hPct, '%'), note: updatedWithin24hPct == null ? 'No open incidents' : 'Reporters kept informed', color: admin.muted },
     { label: 'Reopened', value: fmt(k.reopenedPct, '%'), note: k.reopenedPct == null ? 'Not tracked yet' : 'Fixes that didn’t hold', color: admin.muted },
   ];
+  // Largest count in a sorted tally, so bars scale relative to the top entry (1 avoids dividing by zero).
   const top = (list) => (list[0] ? list[0][1] : 1);
+  // [CONCEPT: JSX expression] JSX is just a value: this element is stored once and reused in several panels.
   const empty = <Box sx={{ fontSize: 13, color: admin.muted }}>No incidents in this view.</Box>;
 
   return (
     <Box sx={{ display: 'grid', gap: 3 }}>
+      {/* [CONCEPT: Responsive design] auto-fit + minmax lets the tiles wrap into fewer columns on narrow screens, with no breakpoints. */}
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', border: `1px solid ${admin.line}`, borderRadius: '12px', overflow: 'hidden' }}>
+        {/* [CONCEPT: List rendering and keys] Labels are unique, so they key the tiles. */}
         {tiles.map((t) => (
           <Box key={t.label} sx={{ p: '18px 20px', display: 'grid', gap: 0.5, borderRight: `1px solid ${admin.line}`, mr: '-1px' }}>
             <Box sx={{ fontSize: 12, letterSpacing: '.08em', textTransform: 'uppercase', color: admin.muted }}>{t.label}</Box>
@@ -32,7 +42,9 @@ export default function InsightsTab({ incidents, engineers, kpis }) {
         ))}
       </Box>
 
+      {/* [CONCEPT: Component composition] Panel supplies the frame and title; whatever is nested inside becomes its children. */}
       <Panel title="Tickets by status">
+        {/* Stacked bar: each status gets flex-grow equal to its count, and empty statuses are skipped. */}
         <Box sx={{ display: 'flex', height: 28, gap: '2px', borderRadius: '8px', overflow: 'hidden' }}>
           {byStatus.filter((s) => s.count).map((s) => (
             <Box key={s.status} title={s.status} sx={{ flex: `${s.count} 0 0`, bgcolor: STATUS_BAR[s.status][0], color: STATUS_BAR[s.status][1], display: 'grid', placeItems: 'center', fontSize: 12.5, fontWeight: 500 }}>{s.count}</Box>
@@ -47,6 +59,7 @@ export default function InsightsTab({ incidents, engineers, kpis }) {
 
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: 3, alignItems: 'start' }}>
         <Panel title="Where problems repeat">
+          {/* [CONCEPT: Conditional rendering] Ternary between the bar list and the shared empty message. */}
           {hotspots.length ? hotspots.map(([label, n]) => <BarRow key={label} label={label} value={n} pct={(n / top(hotspots)) * 100} />) : empty}
           <Box sx={{ fontSize: 13, lineHeight: 1.5, color: '#4a3b2c', borderTop: `1px solid ${admin.line}`, pt: 1.25 }}>
             {repeatSeats.length
@@ -63,6 +76,8 @@ export default function InsightsTab({ incidents, engineers, kpis }) {
           {workload.map((e) => {
             const cap = e.capacity ?? CAPACITY;
             return (
+              // [CONCEPT: Fragment] The label prop is a <>...</> fragment: two spans passed as one value without an extra wrapper element.
+              // The bar turns red when an engineer is within one ticket of capacity.
               <BarRow
                 key={e.id}
                 label={<><Box component="span" sx={{ fontWeight: 500 }}>{e.name}</Box> <Box component="span" sx={{ color: admin.muted }}>· {e.availability}</Box></>}

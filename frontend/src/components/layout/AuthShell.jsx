@@ -1,11 +1,17 @@
+// Shared page layout for the sign-in and register screens, plus two sx style
+// objects (authErrorSx, checkSx) those forms reuse.
 import { useMediaQuery } from 'react-responsive';
 import { Box, Link, Paper, Typography } from '@mui/material';
 import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
 import { admin } from '../../theme/adminTheme';
 
 // Split card for Sign In and Register: dark brand panel on the left, form on the right.
-// `rail` replaces the default blurb area in the brand panel (e.g. the register stepper).
+// `rail` sits in the brand panel under the default blurb (e.g. the register stepper).
+// `mobileRail` replaces the whole lower panel on narrow screens.
+// [CONCEPT: Props] Text slots (kicker, title, blurb...) and element slots (rail, mobileRail) let each page fill the same frame.
 export default function AuthShell({ maxWidth = 880, kicker, title, blurb, rail, mobileRail, shieldText, footerText, children }) {
+  // [CONCEPT: Responsive design] react-responsive's hook re-renders when the viewport crosses 767px,
+  // so the layout switches between a stacked (mobile) and a side-by-side card.
   const isMobile = useMediaQuery({ maxWidth: 767 });
   return (
     <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', px: 2.5, py: isMobile ? 3 : 6, bgcolor: admin.bg }}>
@@ -19,7 +25,9 @@ export default function AuthShell({ maxWidth = 880, kicker, title, blurb, rail, 
               <Typography component="div" sx={{ fontWeight: 600, fontSize: isMobile ? 30 : 40, lineHeight: 1, letterSpacing: '.04em', color: admin.redBright }}>ACME</Typography>
               <Typography component="div" sx={{ fontSize: 14, color: admin.tanLight }}>Coyote Dispatch</Typography>
             </div>
+            {/* [CONCEPT: Conditional rendering] A ternary picks the compact mobile rail or the full desktop panel. */}
             {isMobile ? mobileRail : (
+              // [CONCEPT: Fragment] Returns several siblings from one branch without an extra wrapper element.
               <>
                 <Typography sx={{ fontSize: 14, lineHeight: 1.6, maxWidth: '30ch', color: '#f3e6c8' }}>
                   Report and track facility and workplace technology issues across every ACME building.
@@ -39,6 +47,7 @@ export default function AuthShell({ maxWidth = 880, kicker, title, blurb, rail, 
               <Typography variant="h1" sx={{ fontSize: isMobile ? 26 : 32 }}>{title}</Typography>
               {blurb && <Typography sx={{ mt: 0.5, fontSize: 14, lineHeight: 1.55, color: admin.muted, maxWidth: '52ch' }}>{blurb}</Typography>}
             </div>
+            {/* [CONCEPT: Children prop] Whatever the page nests inside <AuthShell> (the actual form) renders here. */}
             {children}
           </Box>
         </Paper>
@@ -56,5 +65,7 @@ export default function AuthShell({ maxWidth = 880, kicker, title, blurb, rail, 
   );
 }
 
+// [CONCEPT: sx prop] Reusable sx objects: the forms pass these to their error Alert and Checkbox components
+// so both pages share one look without a new theme override.
 export const authErrorSx = { borderRadius: '10px', border: '1px solid oklch(0.8 0.08 25)', bgcolor: 'oklch(0.96 0.02 25)', color: admin.dangerFg };
 export const checkSx = { color: 'rgba(42,29,20,.35)', '&.Mui-checked': { color: admin.red }, p: 0, mr: 1.25 };

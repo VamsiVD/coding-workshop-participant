@@ -1,6 +1,11 @@
+// Service layer for the employee dashboard: the caller's own tickets, ticket detail and
+// actions (notes, confirm fix, reopen, escalate), with mocks for VITE_USE_MOCKS=true.
+// Also exports STATUS_LABEL and toRef, which adminApi and incidentApi reuse.
+// [CONCEPT: Service layer] DashboardPage talks only to dashboardApi; URLs and backend field names stay in this file.
 import { request } from './http';
 import { getSession } from './session';
 
+// [CONCEPT: Environment variables] Set VITE_USE_MOCKS=true in .env to run the UI without the backend.
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
 // ---------------------------------------------------------------------------
@@ -11,11 +16,14 @@ const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 export const STATUS_LABEL = { open: 'Open', in_progress: 'In Progress', blocked: 'Blocked', resolved: 'Resolved', closed: 'Closed' };
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
+// [CONCEPT: Pure helper function] 42 -> 'INC-0042'; toId below reverses it.
 export const toRef = (id) => `INC-${String(id).padStart(4, '0')}`;
 const toId = (ref) => Number(String(ref).replace(/^INC-/, ''));
 
+// 'HQ North · Level 3', or just the building when there is no floor.
 const place = (building, floor) => [building, floor].filter(Boolean).join(' · ');
 
+// One row of GET /incidents -> a Ticket for the list. No notes here; getTicket loads them.
 function fromSummary(row) {
   return {
     ref: toRef(row.id),
@@ -35,7 +43,9 @@ function fromSummary(row) {
   };
 }
 
+// Full Ticket from GET /incidents/:id plus its notes. buildingId/floorId are kept for the nearby lookup.
 function fromDetail(d, notes) {
+  // The signed-in user's id, used to flag which notes are "mine" (shown differently in the thread).
   const me = getSession()?.user.id;
   return {
     ref: toRef(d.id),
@@ -66,6 +76,7 @@ function fromDetail(d, notes) {
 
 async function getTicket(ref) {
   const id = toId(ref);
+  // [CONCEPT: Async data fetching] Detail and notes are fetched in parallel with Promise.all.
   const [detail, notes] = await Promise.all([
     request(`/incidents/${id}`),
     request(`/incidents/${id}/notes?order=desc&limit=100`),
@@ -79,8 +90,10 @@ async function getNearby(tickets) {
   const anchor = tickets.find((t) => t.status !== 'Closed' && t.status !== 'Resolved');
   if (!anchor) return { nearby: [], location: null };
   const t = await getTicket(anchor.ref);
+  // Narrow to the floor when the ticket has one, otherwise the whole building.
   const where = t.floorId ? `floor_id=${t.floorId}` : `building_id=${t.buildingId}`;
   const rows = await request(`/incidents/similar?${where}&limit=6`);
+  // Drop the caller's own tickets; they already appear in the main list.
   const mine = new Set(tickets.map((x) => x.id));
   return {
     location: t.place,
@@ -104,6 +117,7 @@ const api = {
       request('/reports/response-times'),
     ]);
     const tickets = page.items.map(fromSummary);
+    // "Nearby" is a nice-to-have: if it fails, show an empty panel instead of failing the whole dashboard.
     const { nearby, location } = await getNearby(tickets).catch(() => ({ nearby: [], location: null }));
     const hours = times.overall.avg_hours_to_resolve;
     return {
@@ -114,12 +128,14 @@ const api = {
     };
   },
   getTicket,
+  // Each action below returns the refreshed Ticket, so the page can replace its copy with the server's.
   // Placeholder: no read tracking on the backend.
   markRead: async () => ({ ok: true }),
   addNote: async (ref, text) => {
     await request(`/incidents/${toId(ref)}/notes`, { method: 'POST', body: { body: text } });
     return getTicket(ref);
   },
+  // The reporter confirming a resolved fix closes the ticket; reopen sends it back to In Progress.
   confirmFix: async (ref) => {
     await request(`/incidents/${toId(ref)}/status`, { method: 'POST', body: { status: 'closed' } });
     return getTicket(ref);
@@ -140,6 +156,7 @@ const api = {
 // Mocks (VITE_USE_MOCKS=true), from the design.
 // ---------------------------------------------------------------------------
 
+// [CONCEPT: Mock data] An in-memory copy of one employee's dashboard; reloading the page resets it.
 const ago = (h) => new Date(Date.now() - h * 3600e3).toISOString();
 let db = {
   stats: { avgFixDays: 2.8 },
@@ -165,7 +182,10 @@ let db = {
     { ref: 'INC-0411', title: 'Dock not detecting laptops at 3.08', status: 'In Progress', affectedCount: 0, affectsMe: false },
   ],
 };
+// Fake network delay so loading states show up in mock mode.
 const wait = (ms = 200) => new Promise((r) => setTimeout(r, ms));
+// [CONCEPT: Immutable update] Replaces db and the matching ticket with new objects via spread, never mutating in place.
+// Note: unlike the mock getTicket, patch returns the stored object itself, not a structuredClone copy.
 const patch = (ref, p) => { db = { ...db, tickets: db.tickets.map((t) => (t.ref === ref ? { ...t, ...p, updatedAt: new Date().toISOString() } : t)) }; return db.tickets.find((t) => t.ref === ref); };
 const find = (ref) => db.tickets.find((t) => t.ref === ref);
 
@@ -185,4 +205,5 @@ const mocks = {
   },
 };
 
+// Same method names and shapes either way, so DashboardPage does not know which one it got.
 export const dashboardApi = USE_MOCKS ? mocks : api;

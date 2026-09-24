@@ -6,6 +6,15 @@ resource "random_id" "this" {
   }
 }
 
+resource "random_password" "jwt" {
+  length  = 64
+  special = false
+
+  keepers = {
+    seed_input = try(var.aws_app_code, terraform.workspace)
+  }
+}
+
 resource "random_pet" "this" {
   length    = 3
   separator = "-"

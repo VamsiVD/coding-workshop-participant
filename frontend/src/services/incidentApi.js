@@ -1,8 +1,13 @@
+// Service layer for the Report Incident form: buildings/floors/seats, categories, the
+// "already reported on this floor?" check, and creating the incident. Mocks for VITE_USE_MOCKS=true.
+// [CONCEPT: Service layer] ReportIncidentPage calls incidentApi.* and gets UI-ready shapes back.
 import { request } from './http';
 import { STATUS_LABEL, toRef } from './dashboardApi';
 
+// [CONCEPT: Environment variables] 'true' in .env makes incidentApi below point at the mocks.
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
+// 'medium' -> 'Medium' for display.
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 const api = {
@@ -19,6 +24,7 @@ const api = {
     return rows.map((r) => ({ ref: toRef(r.id), id: r.id, title: r.title, status: STATUS_LABEL[r.status] }));
   },
   // -> { ref, status, priority, escalated }
+  // escalated: true = escalation requested, false = none asked for, null = the escalation call failed.
   createIncident: async (payload, { escalationReason } = {}) => {
     const created = await request('/incidents', { method: 'POST', body: payload });
     let escalated = false;
@@ -37,6 +43,7 @@ const api = {
   },
 };
 
+// [CONCEPT: Mock data] Small fixed data set; floor 12 (HQ North, Level 3) returns open tickets to show the duplicate check.
 const wait = (ms = 250) => new Promise((r) => setTimeout(r, ms));
 const MOCK_BUILDINGS = [
   { id: 1, name: 'HQ North', code: 'HQ1', floors: [{ id: 11, level: 0, label: 'Ground Floor', seats: [] }, { id: 12, level: 3, label: 'Level 3', seats: [{ id: 101, code: 'HQ1-3F-A14' }] }] },
@@ -63,4 +70,5 @@ const mocks = {
   createIncident: async (_, { escalationReason } = {}) => { await wait(); return { ref: 'INC-0419', status: 'Open', priority: 'Medium', escalated: Boolean(escalationReason) }; },
 };
 
+// Both objects share method names and return shapes, so the page works the same in either mode.
 export const incidentApi = USE_MOCKS ? mocks : api;

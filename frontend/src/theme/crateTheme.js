@@ -1,5 +1,8 @@
+// Earlier "wooden crate" MUI theme (square corners, stencil and typewriter fonts).
+// Not applied by App.jsx, which uses adminTheme; only AppHeader still imports its tokens.
 import { createTheme } from '@mui/material/styles';
 
+// Colour tokens, exported so components can use them directly in sx.
 export const crate = {
   ink: '#2a1d14',
   paper: '#f3e6c8',
@@ -19,6 +22,7 @@ export const fonts = {
   stencil: "'Big Shoulders Stencil Display', sans-serif",
 };
 
+// CSS-only wood grain: horizontal plank seams plus a faint vertical grain, layered as gradients.
 export const woodBackground = {
   backgroundColor: crate.wood,
   backgroundImage: [
@@ -27,6 +31,7 @@ export const woodBackground = {
   ].join(','),
 };
 
+// Shared small-caps label style, spread into the form label override below.
 const labelType = {
   fontFamily: fonts.heading,
   fontWeight: 500,
@@ -35,6 +40,7 @@ const labelType = {
   textTransform: 'uppercase',
 };
 
+// [CONCEPT: MUI theme] Palette, typography and component overrides; borderRadius: 0 gives every component square corners.
 const theme = createTheme({
   palette: {
     primary: { main: crate.red, dark: crate.redDark, contrastText: crate.paper },
@@ -73,6 +79,7 @@ const theme = createTheme({
       defaultProps: { disableElevation: true },
       styleOverrides: {
         root: { minHeight: 48, paddingInline: 28 },
+        // Hard offset shadow that disappears on press, so the button looks pushed in.
         containedPrimary: {
           border: `2px solid ${crate.ink}`,
           boxShadow: `3px 3px 0 ${crate.ink}`,
@@ -101,6 +108,7 @@ const theme = createTheme({
           fontSize: 15,
           '& .MuiOutlinedInput-notchedOutline': { borderWidth: 2, borderColor: crate.ink },
           '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: crate.ink },
+          // [CONCEPT: Accessibility] A visible red focus ring, so keyboard users can see which field is active.
           '&.Mui-focused': { boxShadow: '0 0 0 3px rgba(179,38,30,.18)' },
           '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: crate.red, borderWidth: 2 },
           '&.Mui-error .MuiOutlinedInput-notchedOutline': { borderColor: crate.red },

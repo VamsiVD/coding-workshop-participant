@@ -50,7 +50,7 @@ Windows is a Microsoft Store stub, not an interpreter. Tick **Add python.exe to
 PATH** during installation.
 
 ```bash
-cd backend
+cd backend/api
 python -m venv .venv
 source .venv/Scripts/activate      # Git Bash on Windows
 # .venv\Scripts\activate           # PowerShell

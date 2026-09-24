@@ -6,6 +6,25 @@ resource "aws_cloudfront_origin_access_control" "this" {
   signing_protocol                  = "sigv4"
 }
 
+# Serves index.html for client-side routes such as /login. Attached to the S3
+# behavior only, so API responses (including 403/404) pass through untouched.
+resource "aws_cloudfront_function" "spa" {
+  count   = data.aws_caller_identity.this.id != "000000000000" ? 1 : 0
+  name    = format("%s-spa-%s", var.aws_project, local.app_id)
+  runtime = "cloudfront-js-2.0"
+  publish = true
+  code    = <<-EOT
+    function handler(event) {
+      var request = event.request;
+      // No file extension means an app route, not a static asset
+      if (request.uri.indexOf('.') === -1) {
+        request.uri = '/index.html';
+      }
+      return request;
+    }
+  EOT
+}
+
 resource "aws_cloudfront_distribution" "this" {
   count               = data.aws_caller_identity.this.id != "000000000000" ? 1 : 0
   enabled             = true
@@ -39,13 +58,6 @@ resource "aws_cloudfront_distribution" "this" {
     }
   }
 
-  custom_error_response {
-    error_code            = 404
-    error_caching_min_ttl = 300
-    response_code         = 200
-    response_page_path    = "/index.html"
-  }
-
   # logging_config {
   #   include_cookies = false
   #   bucket          = var.aws_bucket
@@ -55,7 +67,8 @@ resource "aws_cloudfront_distribution" "this" {
   dynamic "ordered_cache_behavior" {
     for_each = local.function_origins
     content {
-      path_pattern     = "/api/${ordered_cache_behavior.value.name}*"
+      # A service named "api" serves every /api route; others serve their own prefix
+      path_pattern     = ordered_cache_behavior.value.name == "api" ? "/api/*" : "/api/${ordered_cache_behavior.value.name}*"
       target_origin_id = ordered_cache_behavior.value.origin_id
 
       allowed_methods        = ["GET", "HEAD", "OPTIONS", "DELETE", "PATCH", "POST", "PUT"]
@@ -103,6 +116,11 @@ resource "aws_cloudfront_distribution" "this" {
       cookies {
         forward = "none"
       }
+    }
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = element(aws_cloudfront_function.spa.*.arn, count.index)
     }
   }
 

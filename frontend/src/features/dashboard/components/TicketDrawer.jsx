@@ -1,3 +1,6 @@
+// Right-hand drawer showing one of the employee's own tickets: progress,
+// details and notes, plus the reporter's actions (confirm or reopen a fix,
+// request escalation, add a note). Actions are the page's handlers.
 import { useState } from 'react';
 import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Drawer, IconButton, TextField, Typography } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
@@ -5,14 +8,20 @@ import { admin } from '../../../theme/adminTheme';
 import { flowBars, timeAgo } from '../ticketModel';
 
 export default function TicketDrawer({ ticket, location, open, onClose, onConfirm, onReopen, onEscalate, onAddNote, busy }) {
+  // [CONCEPT: useState] Local drafts only: the note text, and the escalation dialog's open flag and reason.
+  // These are not reset when a different ticket opens, so an unsent draft carries over.
   const [draft, setDraft] = useState('');
   const [escalateOpen, setEscalateOpen] = useState(false);
   const [escalateReason, setEscalateReason] = useState('');
 
+  // [CONCEPT: Conditional rendering] Early return after all hooks (hooks must run in the same order every render).
   if (!ticket) return null;
+  // Closed is final: no notes. Escalation only makes sense while work is still outstanding.
   const canNote = ticket.status !== 'Closed';
   const canEscalate = ticket.status !== 'Resolved' && ticket.status !== 'Closed';
 
+  // [CONCEPT: Form submission] preventDefault stops the browser's full-page form post; the note goes through the API instead.
+  // The draft is cleared after the await. act() in the page never rejects, so it is cleared even when the call failed.
   const send = async (e) => {
     e.preventDefault();
     if (!draft.trim()) return;
@@ -20,6 +29,7 @@ export default function TicketDrawer({ ticket, location, open, onClose, onConfir
     setDraft('');
   };
 
+  // [CONCEPT: Form validation] A reason is required; the Send request button is also disabled while it is blank.
   const submitEscalation = async () => {
     if (!escalateReason.trim()) return;
     await onEscalate(ticket.ref, escalateReason.trim());
@@ -28,12 +38,13 @@ export default function TicketDrawer({ ticket, location, open, onClose, onConfir
   };
 
   return (
-    <Drawer
+    // [CONCEPT: MUI component] MUI Drawer provides the slide-in panel, backdrop, Escape-to-close and focus handling.
+    <Drawer slotProps={{ backdrop: { sx: { bgcolor: 'rgba(42,29,20,.45)' } }, paper: { sx: { width: 460, maxWidth: '100%', bgcolor: admin.bg, borderRadius: '16px 0 0 16px' } } }}
       anchor="right"
       open={open}
       onClose={onClose}
-      PaperProps={{ sx: { width: 460, maxWidth: '100%', bgcolor: admin.bg, borderRadius: '16px 0 0 16px' } }}
-      slotProps={{ backdrop: { sx: { bgcolor: 'rgba(42,29,20,.45)' } } }}
+     
+     
     >
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1.5, p: '14px 20px', borderBottom: `1px solid ${admin.line}`, position: 'sticky', top: 0, bgcolor: admin.bg, zIndex: 1 }}>
         <Typography sx={{ fontWeight: 600, fontSize: 18, color: admin.brown }}>{ticket.ref}</Typography>
@@ -46,7 +57,9 @@ export default function TicketDrawer({ ticket, location, open, onClose, onConfir
           <Typography sx={{ fontSize: 13.5, mt: 0.5, color: admin.muted }}>{location}{ticket.seat ? ` · Seat ${ticket.seat}` : ''}</Typography>
         </div>
 
+        {/* [CONCEPT: Accessibility] The bars are purely visual, so role="img" with an aria-label reads the status as one phrase. */}
         <Box role="img" aria-label={`Status: ${ticket.status}`} sx={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '3px' }}>
+          {/* [CONCEPT: List rendering and keys] flowBars returns one entry per status; the status name is the key. */}
           {flowBars(ticket.status).map((b) => (
             <Box key={b.name} sx={{ display: 'grid', gap: 0.75 }}>
               <Box component="span" sx={{ height: 4, borderRadius: 2, bgcolor: b.color }} />
@@ -55,12 +68,14 @@ export default function TicketDrawer({ ticket, location, open, onClose, onConfir
           ))}
         </Box>
 
+        {/* blockedReason only exists on the full ticket, so this appears once getTicket has loaded it. */}
         {ticket.status === 'Blocked' && ticket.blockedReason && (
           <Box sx={{ border: '1px solid oklch(0.8 0.08 25)', borderRadius: '10px', bgcolor: 'oklch(0.96 0.02 25)', p: '12px 16px', fontSize: 14, lineHeight: 1.5, color: admin.dangerFg }}>
             <b style={{ fontWeight: 500 }}>Blocked:</b> {ticket.blockedReason}
           </Box>
         )}
 
+        {/* The reporter closes the loop: confirming moves the ticket to Closed, reopening sends it back to In Progress. */}
         {ticket.status === 'Resolved' && (
           <Box sx={{ border: `1px solid ${admin.tan}`, borderRadius: '10px', bgcolor: admin.sand, p: '14px 16px', display: 'grid', gap: 1.25 }}>
             <Typography sx={{ fontWeight: 600, fontSize: 16 }}>Is it fixed?</Typography>
@@ -106,20 +121,23 @@ export default function TicketDrawer({ ticket, location, open, onClose, onConfir
               {n.text}
             </Box>
           ))}
+          {/* A real <form>, so pressing Enter in the field submits it. */}
           {canNote && (
             <Box component="form" onSubmit={send} sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
-              <TextField size="small" fullWidth placeholder="Add a note for the engineer" value={draft} onChange={(e) => setDraft(e.target.value)} inputProps={{ 'aria-label': 'Add a note' }} />
+              {/* [CONCEPT: Controlled input] value comes from `draft` state and each keystroke calls setDraft. */}
+              <TextField slotProps={{ htmlInput: { 'aria-label': 'Add a note' } }} size="small" fullWidth placeholder="Add a note for the engineer" value={draft} onChange={(e) => setDraft(e.target.value)} />
               <Button type="submit" variant="contained" disabled={busy || !draft.trim()}>Send</Button>
             </Box>
           )}
         </Box>
       </Box>
 
-      <Dialog open={escalateOpen} onClose={() => setEscalateOpen(false)} PaperProps={{ sx: { borderRadius: '16px', bgcolor: admin.bg } }}>
+      {/* Modal dialog for the escalation reason, opened by the Request escalation button. */}
+      <Dialog slotProps={{ paper: { sx: { borderRadius: '16px', bgcolor: admin.bg } } }} open={escalateOpen} onClose={() => setEscalateOpen(false)}>
         <DialogTitle sx={{ fontWeight: 600, fontSize: 20 }}>Request escalation</DialogTitle>
         <DialogContent>
           <Typography sx={{ fontSize: 14, mb: 1.5, color: '#4a3b2c' }}>For safety risks, or when a whole team can’t work. A facility admin reviews every request.</Typography>
-          <TextField
+          <TextField slotProps={{ htmlInput: { 'aria-label': 'Reason for escalation' } }}
             autoFocus
             fullWidth
             multiline
@@ -127,7 +145,7 @@ export default function TicketDrawer({ ticket, location, open, onClose, onConfir
             placeholder="Why does this need escalating?"
             value={escalateReason}
             onChange={(e) => setEscalateReason(e.target.value)}
-            inputProps={{ 'aria-label': 'Reason for escalation' }}
+           
           />
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>

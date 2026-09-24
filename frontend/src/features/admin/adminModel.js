@@ -1,8 +1,12 @@
+// Admin console model: status rules, queue filters, colour maps and the
+// insight calculations. No React here, just plain functions and constants the
+// admin components share, so the rules live in one place and are easy to test.
 import { admin } from '../../theme/adminTheme';
 
+// Lifecycle order; the drawer's progress bar is drawn in this order.
 export const STATUSES = ['Open', 'In Progress', 'Blocked', 'Resolved', 'Closed'];
 
-// Mirrors ALLOWED_TRANSITIONS in backend/app/schemas/incidents.py, so the
+// Mirrors ALLOWED_TRANSITIONS in backend/api/app/schemas/incidents.py, so the
 // status picker only offers a move the server would accept.
 export const NEXT_STATUSES = {
   Open: ['In Progress', 'Closed'],
@@ -15,12 +19,15 @@ export const NEXT_STATUSES = {
 // Fallback when an engineer has no capacity on record.
 export const CAPACITY = 6;
 
+// [CONCEPT: Pure helper function] Each predicate takes an incident and returns a boolean, so it can be passed straight to Array.filter.
 export const isUnassigned = (i) => i.status === 'Open' && !i.assigneeId;
 export const isEscalation = (i) => i.escalation === 'requested';
 export const isBlocked = (i) => i.status === 'Blocked';
 export const isActive = (i) => i.status !== 'Resolved' && i.status !== 'Closed';
 export const needsAction = (i) => isUnassigned(i) || isEscalation(i) || isBlocked(i);
 
+// Queue filter key -> predicate. The keys match the stat cards and scope
+// toggles in QueueTab, which does incidents.filter(FILTERS[filter]).
 export const FILTERS = {
   action: needsAction,
   unassigned: isUnassigned,
@@ -30,6 +37,7 @@ export const FILTERS = {
   all: () => true,
 };
 
+// Colour lookups. STATUS_BAR and PRIORITY_STYLE hold [background, text] pairs.
 export const STATUS_DOT = { Open: admin.tan, 'In Progress': admin.brown, Blocked: admin.danger, Resolved: '#9c8a6c', Closed: '#dccfb6' };
 export const STATUS_BAR = {
   Open: [admin.tanLight, admin.ink],
@@ -45,10 +53,13 @@ export const PRIORITY_STYLE = {
   Critical: [admin.dangerBg, admin.dangerFg],
 };
 
+// Building names look like 'HQ North · Munich'; keep the part before the city.
 export const shortBuilding = (b) => b.split(' · ')[0];
 // Floor and seat are optional on an incident, so join what is there.
 export const placeLine = (i) => [shortBuilding(i.building), i.floor, i.seat].filter(Boolean).join(', ');
 
+// Compact age for table cells: '5m', '3h', '2d' (never below '1m'). Clamped
+// at 0 so clock skew between server and browser never gives a negative age.
 export function age(iso) {
   const h = Math.max(0, (Date.now() - new Date(iso).getTime()) / 3600e3);
   if (h < 1) return `${Math.max(1, Math.round(h * 60))}m`;
@@ -56,6 +67,8 @@ export function age(iso) {
   return `${Math.round(h / 24)}d`;
 }
 
+// The button shown at the end of a queue row. Checks run in priority order:
+// an escalation outranks being unassigned, which outranks being blocked.
 export function rowAction(i) {
   if (isEscalation(i)) return { label: 'Review', variant: 'contained' };
   if (isUnassigned(i)) return { label: 'Assign', variant: 'contained' };
@@ -63,12 +76,15 @@ export function rowAction(i) {
   return { label: 'View', variant: 'text' };
 }
 
+// Optional warning line under a queue row's title; null means no line.
 export function rowFlag(i) {
   if (isEscalation(i)) return { text: `Escalation requested${i.escalationReason ? ` — ${i.escalationReason}` : ''}`, color: admin.brown };
   if (isBlocked(i) && i.blockedReason) return { text: `Blocked — ${i.blockedReason}`, color: admin.dangerFg };
   return null;
 }
 
+// Counts items by key(item), skipping empty keys, and returns [key, count]
+// pairs sorted most frequent first.
 const tally = (list, key) => {
   const m = {};
   list.forEach((i) => { const k = key(i); if (k) m[k] = (m[k] || 0) + 1; });
@@ -77,6 +93,8 @@ const tally = (list, key) => {
 
 const DAY = 24 * 3600e3;
 
+// Everything the Insights tab charts, derived from the (building-filtered)
+// incident list. `load` counts only In Progress and Blocked work per engineer.
 export function insights(incidents, engineers) {
   const hotspots = tally(incidents, (i) => [shortBuilding(i.building), i.floor].filter(Boolean).join(', ')).slice(0, 4);
   const repeatSeats = tally(incidents, (i) => (i.seat ? `${shortBuilding(i.building)} seat ${i.seat}` : null)).filter((e) => e[1] > 1);

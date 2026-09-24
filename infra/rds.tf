@@ -22,6 +22,10 @@ resource "aws_rds_cluster" "this" {
   vpc_security_group_ids          = data.aws_security_groups.this.ids
   enabled_cloudwatch_logs_exports = ["postgresql"]
 
+  # RDS Data API: run SQL over HTTPS (bin/db-query.sh, RDS Query Editor)
+  # without a network path into the VPC
+  enable_http_endpoint = true
+
   serverlessv2_scaling_configuration {
     max_capacity = 4.0
     min_capacity = 0.0
@@ -39,4 +43,21 @@ resource "aws_rds_cluster_instance" "this" {
   instance_class             = "db.serverless"
   auto_minor_version_upgrade = true
   tags                       = local.app_tags
+}
+
+# Credentials for the Data API, which authenticates through Secrets Manager
+resource "aws_secretsmanager_secret" "rds" {
+  count                   = data.aws_caller_identity.this.id != "000000000000" && var.aws_postgres_enabled ? 1 : 0
+  name                    = format("%s-rds-%s", var.aws_project, local.app_id)
+  recovery_window_in_days = 0
+  tags                    = local.app_tags
+}
+
+resource "aws_secretsmanager_secret_version" "rds" {
+  count     = data.aws_caller_identity.this.id != "000000000000" && var.aws_postgres_enabled ? 1 : 0
+  secret_id = element(aws_secretsmanager_secret.rds.*.id, count.index)
+  secret_string = jsonencode({
+    username = element(aws_rds_cluster.this.*.master_username, count.index)
+    password = random_pet.this.id
+  })
 }

@@ -14,7 +14,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       # Scripts here run once, in filename order, on first start of an empty volume.
-      - ./backend/db/init:/docker-entrypoint-initdb.d:ro
+      - ./backend/api/db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test:
         [

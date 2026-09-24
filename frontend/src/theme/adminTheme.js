@@ -1,3 +1,5 @@
+// The app's active MUI theme (App.jsx wraps every screen in it). Also exports the raw
+// colour tokens (`admin`) and font stack for components that style themselves with sx.
 import { createTheme } from '@mui/material/styles';
 
 // Admin console look (matches Admin Report Viewer v3): cream ground, brown ink, ACME red, rounded corners.
@@ -23,6 +25,8 @@ export const admin = {
 
 export const adminFont = "'Barlow', system-ui, sans-serif";
 
+// [CONCEPT: MUI theme] createTheme sets palette, typography, shape and per-component defaults in one place.
+// color="primary" on any MUI component resolves to admin.red through this palette.
 const theme = createTheme({
   palette: {
     mode: 'light',
@@ -42,7 +46,9 @@ const theme = createTheme({
     h4: { fontSize: 17, fontWeight: 600 },
     button: { textTransform: 'none', fontWeight: 500 },
   },
+  // Global overrides for MUI components: defaultProps change default props, styleOverrides change CSS.
   components: {
+    // Hides scrollbars app-wide; pages still scroll with wheel, touch and keys.
     MuiCssBaseline: {
       styleOverrides: {
         body: { backgroundColor: admin.bg, scrollbarWidth: 'none' },

@@ -1,7 +1,12 @@
+// Service layer for sign-in and registration (POST /auth/login, /auth/register),
+// with mocks for VITE_USE_MOCKS=true. Saving the returned token is session.js's job.
+// [CONCEPT: Service layer] LoginPage and RegisterPage call authApi.* instead of fetch directly.
 import { ApiError, request } from './http';
 
+// [CONCEPT: Environment variables] Read at build time by Vite; the string 'true' switches to the mocks below.
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
+// Fake network delay for the mocks and placeholders.
 const wait = (ms = 400) => new Promise((r) => setTimeout(r, ms));
 
 // ---------------------------------------------------------------------------
@@ -24,6 +29,7 @@ const placeholderEmailCheck = {
 
 const api = {
   // -> UserOut { id, email, full_name, role, ... }
+  // The form uses camelCase (fullName); the backend expects snake_case (full_name).
   register: ({ fullName, email, password }) =>
     request('/auth/register', { method: 'POST', body: { full_name: fullName, email, password } }),
   // -> { access_token, token_type, expires_in, user }
@@ -31,6 +37,8 @@ const api = {
   ...placeholderEmailCheck,
 };
 
+// [CONCEPT: Mock data] Mimics the server's rules and errors: only @acme.inc emails register,
+// and any password of 10+ characters signs in. Errors are thrown as ApiError, like the real request().
 const mocks = {
   register: async ({ fullName, email }) => {
     await wait();
