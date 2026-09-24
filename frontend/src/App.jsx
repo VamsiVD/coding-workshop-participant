@@ -1,5 +1,4 @@
 import { CssBaseline, ThemeProvider } from '@mui/material';
-import theme from './theme/crateTheme';
 import adminTheme from './theme/adminTheme';
 import { clearSession, getSession } from './services/session';
 import ConsoleHeader from './components/layout/ConsoleHeader';
@@ -97,12 +96,10 @@ function route(path) {
 }
 
 export default function App() {
-  const path = window.location.pathname;
-  const useConsoleTheme = ['/admin', '/dashboard', '/incidents'].some((p) => path.startsWith(p));
   return (
-    <ThemeProvider theme={useConsoleTheme ? adminTheme : theme}>
+    <ThemeProvider theme={adminTheme}>
       <CssBaseline />
-      {route(path)}
+      {route(window.location.pathname)}
     </ThemeProvider>
   );
 }

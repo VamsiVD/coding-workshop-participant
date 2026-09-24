@@ -1,66 +1,29 @@
-import { Box, Step, StepConnector, StepLabel, Stepper, Typography, stepConnectorClasses } from '@mui/material';
-import { styled } from '@mui/material/styles';
+import { Box } from '@mui/material';
 import CheckIcon from '@mui/icons-material/Check';
-import { crate, fonts } from '../../../theme/crateTheme';
+import { admin } from '../../../theme/adminTheme';
 
-const Connector = styled(StepConnector)({
-  marginLeft: 15,
-  [`& .${stepConnectorClasses.line}`]: { borderLeftWidth: 2, borderColor: 'rgba(243,230,200,.25)', minHeight: 18 },
-});
-
-function CrateStepIcon({ active, completed, icon }) {
-  const lit = active || completed;
-  return (
-    <Box
-      sx={{
-        width: 32,
-        height: 32,
-        border: '2px solid',
-        borderColor: lit ? crate.redBright : 'rgba(243,230,200,.4)',
-        bgcolor: completed ? crate.redBright : 'transparent',
-        color: crate.paper,
-        display: 'grid',
-        placeItems: 'center',
-        fontFamily: fonts.heading,
-        fontWeight: 600,
-        fontSize: 14,
-      }}
-    >
-      {completed ? <CheckIcon sx={{ fontSize: 18 }} /> : icon}
-    </Box>
-  );
-}
-
+// Vertical step list for the dark brand panel.
 export default function ProgressRail({ steps, activeStep }) {
   return (
-    <Stepper
-      orientation="vertical"
-      activeStep={activeStep}
-      connector={<Connector />}
-      sx={{
-        '& .MuiStepLabel-label': {
-          color: crate.paper,
-          opacity: 0.6,
-          fontFamily: fonts.heading,
-          fontWeight: 600,
-          fontSize: 14,
-          letterSpacing: '.1em',
-          textTransform: 'uppercase',
-        },
-        '& .MuiStepLabel-label.Mui-active, & .MuiStepLabel-label.Mui-completed': { color: crate.paper, opacity: 1, fontWeight: 600 },
-        '& .MuiStepLabel-iconContainer': { pr: 1.75 },
-      }}
-    >
-      {steps.map((s) => (
-        <Step key={s.label}>
-          <StepLabel
-            StepIconComponent={CrateStepIcon}
-            optional={<Typography variant="caption" sx={{ color: crate.paper, opacity: 0.8 }}>{s.sub}</Typography>}
-          >
-            {s.label}
-          </StepLabel>
-        </Step>
-      ))}
-    </Stepper>
+    <Box component="ol" sx={{ listStyle: 'none', m: 0, p: 0, display: 'grid' }}>
+      {steps.map((s, i) => {
+        const done = i < activeStep;
+        const lit = done || i === activeStep;
+        return (
+          <Box component="li" key={s.label} aria-current={i === activeStep ? 'step' : undefined} sx={{ display: 'grid', gridTemplateColumns: '30px minmax(0,1fr)', gap: 1.75 }}>
+            <Box sx={{ display: 'grid', justifyItems: 'center', gridTemplateRows: '30px 1fr' }}>
+              <Box sx={{ width: 30, height: 30, borderRadius: '50%', border: `1px solid ${lit ? admin.redBright : 'rgba(255,250,240,.35)'}`, bgcolor: done ? admin.redBright : 'transparent', display: 'grid', placeItems: 'center', fontWeight: 600, fontSize: 14 }}>
+                {done ? <CheckIcon sx={{ fontSize: 16 }} /> : i + 1}
+              </Box>
+              {i < steps.length - 1 && <Box sx={{ width: '1px', minHeight: 20, bgcolor: 'rgba(255,250,240,.2)' }} />}
+            </Box>
+            <Box sx={{ pt: 0.5, pb: 2.5, opacity: lit ? 1 : 0.6 }}>
+              <Box sx={{ fontWeight: 500, fontSize: 14.5 }}>{s.label}</Box>
+              <Box sx={{ fontSize: 12.5, mt: 0.25, color: admin.tanLight }}>{s.sub}</Box>
+            </Box>
+          </Box>
+        );
+      })}
+    </Box>
   );
 }
