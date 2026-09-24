@@ -30,8 +30,15 @@ const placeholderEmailCheck = {
 const api = {
   // -> UserOut { id, email, full_name, role, ... }
   // The form uses camelCase (fullName); the backend expects snake_case (full_name).
-  register: ({ fullName, email, password }) =>
-    request('/auth/register', { method: 'POST', body: { full_name: fullName, email, password } }),
+  // The workplace ids are optional on the server; the form requires building and floor.
+  register: ({ fullName, email, password, buildingId, floorId, seatId }) =>
+    request('/auth/register', {
+      method: 'POST',
+      body: { full_name: fullName, email, password, building_id: buildingId || null, floor_id: floorId || null, seat_id: seatId || null },
+    }),
+  // -> [{ id, name, code, floors: [{ id, level, label, seats: [{ id, code, kind: 'desk' | 'room' }] }] }]
+  // Public: the workspace step runs before the new employee has an account.
+  listLocations: async () => (await request('/facilities/locations')).buildings,
   // -> { access_token, token_type, expires_in, user }
   login: ({ email, password }) => request('/auth/login', { method: 'POST', body: { email, password } }),
   ...placeholderEmailCheck,
@@ -44,6 +51,16 @@ const mocks = {
     await wait();
     if (!/@acme\.inc$/i.test(email)) throw new ApiError('The request data is invalid.', { email: 'Only @acme.inc addresses can register.' });
     return { id: 1, email, full_name: fullName, role: 'employee' };
+  },
+  listLocations: async () => {
+    await wait(120);
+    return [
+      { id: 1, name: 'HQ North', code: 'HQ1', floors: [
+        { id: 11, level: 0, label: 'Ground Floor', seats: [{ id: 101, code: 'HQ1-0F-A01', kind: 'desk' }, { id: 102, code: 'Reception Lounge', kind: 'room' }] },
+        { id: 12, level: 1, label: 'Level 1', seats: [{ id: 103, code: 'HQ1-1F-A01', kind: 'desk' }, { id: 104, code: 'Condor', kind: 'room' }, { id: 105, code: 'Heron', kind: 'room' }] },
+      ] },
+      { id: 2, name: 'Riverside Annex', code: 'RA1', floors: [{ id: 21, level: 0, label: 'Ground Floor', seats: [{ id: 201, code: 'Wren', kind: 'room' }] }] },
+    ];
   },
   login: async ({ email, password }) => {
     await wait();

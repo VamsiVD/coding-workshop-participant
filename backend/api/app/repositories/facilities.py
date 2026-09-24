@@ -10,14 +10,14 @@ from psycopg import Connection
 # Explicit column lists per table, reused by every SELECT and RETURNING below.
 BUILDING = "id, name, code, address, is_active, created_at"
 FLOOR = "id, building_id, level, label, created_at"
-SEAT = "id, floor_id, code, created_at"
+SEAT = "id, floor_id, code, kind, created_at"
 
 # The columns a PATCH may touch, per table. Keys double as the only table
 # names _update() will interpolate into SQL.
 _ALLOWED_UPDATES = {
     "buildings": {"name", "code", "address", "is_active"},
     "floors": {"level", "label"},
-    "seats": {"code"},
+    "seats": {"code", "kind"},
 }
 
 
@@ -191,15 +191,15 @@ def get_seat(conn: Connection, seat_id: int) -> dict | None:
         return cur.fetchone()
 
 
-def create_seat(conn: Connection, *, floor_id: int, code: str) -> dict:
+def create_seat(conn: Connection, *, floor_id: int, code: str, kind: str = "desk") -> dict:
     with conn.cursor() as cur:
         cur.execute(
             f"""
-            INSERT INTO seats (floor_id, code)
-            VALUES (%(floor_id)s, %(code)s)
+            INSERT INTO seats (floor_id, code, kind)
+            VALUES (%(floor_id)s, %(code)s, %(kind)s)
             RETURNING {SEAT}
             """,
-            {"floor_id": floor_id, "code": code},
+            {"floor_id": floor_id, "code": code, "kind": kind},
         )
         return cur.fetchone()
 
@@ -240,7 +240,7 @@ def tree(conn: Connection) -> list[dict]:
 
     Returns one row per active building: id, name, code and `floors`, a JSON
     list of {id, level, label, seats} ordered by level, where `seats` is a
-    list of {id, code} ordered by code. The inner subquery builds each
+    list of {id, code, kind}, desks before rooms, each ordered by code. The inner subquery builds each
     floor's seat list first, then the outer query nests floors under their
     building. Both joins are LEFT and the aggregates are filtered and
     coalesced, so an empty building or floor yields `[]` rather than a list
@@ -264,8 +264,8 @@ def tree(conn: Connection) -> list[dict]:
                 SELECT fl.id, fl.building_id, fl.level, fl.label,
                        coalesce(
                            jsonb_agg(
-                               jsonb_build_object('id', s.id, 'code', s.code)
-                               ORDER BY s.code
+                               jsonb_build_object('id', s.id, 'code', s.code, 'kind', s.kind)
+                               ORDER BY s.kind, s.code
                            ) FILTER (WHERE s.id IS NOT NULL),
                            '[]'::jsonb
                        ) AS seats

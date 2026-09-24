@@ -33,6 +33,17 @@ router = APIRouter(tags=["facilities"])
 # ---------------------------------------------------------------------------
 
 
+@router.get("/facilities/locations", response_model=FacilityTree)
+def public_locations(conn: DbConnection) -> FacilityTree:
+    """The same tree as `/facilities/tree`, without signing in.
+
+    Public, because the registration form asks new employees where they work
+    before they have an account. It carries only active buildings and the
+    names of their floors, desks and rooms.
+    """
+    return service.tree(conn)
+
+
 @router.get("/facilities/tree", response_model=FacilityTree)
 def facility_tree(conn: DbConnection, _: CurrentUserDep) -> FacilityTree:
     """Buildings, floors and seats in one call, for cascading dropdowns.

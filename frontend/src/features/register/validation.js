@@ -29,5 +29,17 @@ export function validateDetails(form) {
   return errors;
 }
 
+// Workspace step: building and floor are required; a desk or room is optional,
+// but once "Desk" or "Room" is chosen, one must be picked.
+export function validateWorkspace(form) {
+  const errors = {};
+  if (!form.buildingId) errors.buildingId = 'Choose your building.';
+  if (!form.floorId) errors.floorId = 'Choose your floor.';
+  if (form.spotKind !== 'none' && !form.seatId) {
+    errors.seatId = form.spotKind === 'room' ? 'Choose your room, or pick “No fixed spot”.' : 'Choose your desk, or pick “No fixed spot”.';
+  }
+  return errors;
+}
+
 // Strips everything but digits and caps the length, e.g. "12 34-567" -> "123456".
 export const onlyDigits = (v, max = 6) => v.replace(/\D/g, '').slice(0, max);

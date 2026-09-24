@@ -6,7 +6,7 @@ Request and response models for the auth routes. The rules behind them
 
 from datetime import datetime
 
-from pydantic import EmailStr, Field, field_validator
+from pydantic import EmailStr, Field, field_validator, model_validator
 
 from app.schemas.common import ApiModel, ApiResponse, UserRole
 
@@ -32,6 +32,23 @@ class RegisterRequest(ApiModel):
     email: EmailStr
     password: str = Field(min_length=10, max_length=128)
     full_name: str = Field(min_length=1, max_length=120)
+    # Where the employee works. Optional here so API clients that predate it
+    # keep working; the registration form asks for building and floor. The
+    # seat may be a desk or a room.
+    building_id: int | None = None
+    floor_id: int | None = None
+    seat_id: int | None = None
+
+    @model_validator(mode="after")
+    def location_is_a_path(self) -> "RegisterRequest":
+        # Mirrors users_floor_needs_building and users_seat_needs_floor: each
+        # level needs the one above it. Whether they actually belong together
+        # is checked against the database in the service.
+        if self.floor_id is not None and self.building_id is None:
+            raise ValueError("Choose a building for this floor.")
+        if self.seat_id is not None and self.floor_id is None:
+            raise ValueError("Choose a floor for this desk or room.")
+        return self
 
     @field_validator("email")
     @classmethod
@@ -91,6 +108,10 @@ class UserOut(ApiResponse):
     full_name: str
     role: UserRole
     is_active: bool
+    # The user's workplace, if they gave one at registration.
+    building_id: int | None = None
+    floor_id: int | None = None
+    seat_id: int | None = None
     created_at: datetime
     updated_at: datetime
 

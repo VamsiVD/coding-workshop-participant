@@ -6,6 +6,7 @@ constraint name.
 """
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import Field, field_validator
 
@@ -98,30 +99,36 @@ class FloorOut(ApiResponse):
 # ---------------------------------------------------------------------------
 
 
-class SeatCreate(ApiModel):
-    """A seat on a floor; the floor comes from the URL path. The code is unique
-    within its floor (seats_unique_code)."""
+# A seat is either a desk or a room. Rooms are named ("Condor") rather than
+# coded, so the service upper-cases desk codes only.
+SeatKind = Literal["desk", "room"]
 
-    code: str = Field(min_length=1, max_length=40, examples=["HQ1-2F-A01"])
+
+class SeatCreate(ApiModel):
+    """A desk or room on a floor; the floor comes from the URL path. The code
+    (a room's name) is unique within its floor (seats_unique_code)."""
+
+    code: str = Field(min_length=1, max_length=40, examples=["HQ1-2F-A01", "Condor"])
+    kind: SeatKind = "desk"
 
     @field_validator("code")
     @classmethod
-    def upper_case_code(cls, value: str) -> str:
-        # Upper-cased for the same reason as building codes: one spelling per
-        # seat, so the unique constraint means what it says.
-        return value.strip().upper()
+    def strip_code(cls, value: str) -> str:
+        # Case is settled in the service, which knows whether this is a desk.
+        return value.strip()
 
 
 class SeatUpdate(ApiModel):
-    """PATCH body. Only the code can change; a seat stays on its floor."""
+    """PATCH body. The code and kind can change; a seat stays on its floor."""
 
     code: str | None = Field(default=None, min_length=1, max_length=40)
+    kind: SeatKind | None = None
 
     @field_validator("code")
     @classmethod
-    def upper_case_code(cls, value: str | None) -> str | None:
+    def strip_code(cls, value: str | None) -> str | None:
         # None (field omitted or null) is passed through untouched.
-        return value.strip().upper() if value else value
+        return value.strip() if value else value
 
 
 class SeatOut(ApiResponse):
@@ -130,6 +137,7 @@ class SeatOut(ApiResponse):
     id: int
     floor_id: int
     code: str
+    kind: SeatKind
     created_at: datetime
 
 
@@ -139,10 +147,11 @@ class SeatOut(ApiResponse):
 
 
 class SeatNode(ApiResponse):
-    """Leaf of the facility tree: just enough to fill the seat dropdown."""
+    """Leaf of the facility tree: just enough to fill the desk or room dropdown."""
 
     id: int
     code: str
+    kind: SeatKind = "desk"
 
 
 class FloorNode(ApiResponse):

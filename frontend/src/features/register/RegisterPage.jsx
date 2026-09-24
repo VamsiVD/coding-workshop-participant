@@ -1,29 +1,34 @@
-// Registration wizard (/register): step 0 account details, step 1 verify email,
-// then a "done" screen. This page owns all wizard state (current step, form
+// Registration wizard (/register): step 0 account details, step 1 workspace
+// (building, floor, desk or room), step 2 verify email, then a "done" screen. This page owns all wizard state (current step, form
 // values, errors) and passes it down to the step components as props.
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, Box, LinearProgress, Typography } from '@mui/material';
 import { authApi } from '../../services/authApi';
 import { admin } from '../../theme/adminTheme';
 import AuthShell, { authErrorSx } from '../../components/layout/AuthShell';
-import { validateDetails } from './validation';
+import { validateDetails, validateWorkspace } from './validation';
 import ProgressRail from './components/ProgressRail';
 import DetailsStep from './steps/DetailsStep';
+import WorkspaceStep from './steps/WorkspaceStep';
 import VerifyEmailStep from './steps/VerifyEmailStep';
 import DoneStep from './steps/DoneStep';
 
 const STEPS = [
   { label: 'Account details', sub: 'Name, email, password' },
+  { label: 'Your workspace', sub: 'Building, floor, desk or room' },
   { label: 'Verify email', sub: 'One-time code' },
 ];
-// The "done" screen is the index just past the last real step (2), so it is
+const WORKSPACE = 1;
+const VERIFY = 2;
+// The "done" screen is the index just past the last real step (3), so it is
 // not shown as a step in the progress rail.
 const DONE = STEPS.length;
 
-// Heading text per step, indexed by `step` (0, 1, DONE). Step 1's blurb is
-// null because it is built from the email address at render time.
+// Heading text per step, indexed by `step` (0, 1, 2, DONE). The verify step's
+// blurb is null because it is built from the email address at render time.
 const COPY = [
   { title: 'Create your account', blurb: 'Use your ACME work email. Accounts are for employees only.' },
+  { title: 'Where do you work?', blurb: 'Pick your building and floor, and your desk or meeting room if you have one.' },
   { title: 'Verify your email', blurb: null },
   { title: 'Your account is ready', blurb: 'Sign in to report and track incidents.' },
 ];
@@ -31,9 +36,18 @@ const COPY = [
 // Backend field names -> form field names, so server validation errors land on
 // the right input. The form splits the name in two but the API takes one
 // full_name, so name errors are shown under "First name".
-const SERVER_FIELDS = { full_name: 'firstName', email: 'email', password: 'password' };
+const SERVER_FIELDS = {
+  full_name: 'firstName', email: 'email', password: 'password',
+  building_id: 'buildingId', floor_id: 'floorId', seat_id: 'seatId',
+};
+// Errors on these belong to step 0, so the wizard goes back there to show them.
+const DETAIL_FIELDS = new Set(['firstName', 'email', 'password']);
 
-const EMPTY_FORM = { firstName: '', lastName: '', email: '', password: '', acceptedPolicy: false };
+// spotKind: 'desk' | 'room' | 'none'. Ids stay '' until chosen, which is what MUI's Select expects.
+const EMPTY_FORM = {
+  firstName: '', lastName: '', email: '', password: '', acceptedPolicy: false,
+  buildingId: '', floorId: '', spotKind: 'desk', seatId: '',
+};
 
 export default function RegisterPage() {
   // [CONCEPT: Lifting state up] The form lives here, not in DetailsStep, so it
@@ -47,6 +61,20 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState('');
+  // The building tree for the workspace step: null while loading.
+  const [locations, setLocations] = useState(null);
+  const [locationsError, setLocationsError] = useState('');
+
+  // [CONCEPT: useCallback] Stable, so the effect below runs once and Retry can call it again.
+  const loadLocations = useCallback(() => {
+    setLocationsError('');
+    authApi.listLocations()
+      .then(setLocations)
+      .catch(() => setLocationsError('Could not load the list of buildings. Check your connection and try again.'));
+  }, []);
+
+  // [CONCEPT: useEffect] Fetched on page load, so the list is ready by the time step 1 opens.
+  useEffect(() => { loadLocations(); }, [loadLocations]);
 
   // [CONCEPT: Derived state] Normalised email computed from the form each render,
   // so the value sent to the API always matches what was typed.
@@ -67,8 +95,17 @@ export default function RegisterPage() {
       const mapped = Object.fromEntries(
         Object.entries(e.fields ?? {}).filter(([k]) => SERVER_FIELDS[k]).map(([k, v]) => [SERVER_FIELDS[k], v]),
       );
-      if (Object.keys(mapped).length) setFieldErrors(mapped);
-      else setError(e.message);
+      if (Object.keys(mapped).length) {
+        setFieldErrors(mapped);
+        // A problem with the name, email or password is shown on step 0.
+        if (Object.keys(mapped).some((k) => DETAIL_FIELDS.has(k))) setStep(0);
+      } else if (e.status === 409) {
+        // The only 409 here is an email that is already registered.
+        setFieldErrors({ email: e.message });
+        setStep(0);
+      } else {
+        setError(e.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -82,25 +119,38 @@ export default function RegisterPage() {
     setFieldErrors((e) => ({ ...e, [field]: undefined }));
   };
 
-  // Step 0 -> 1: validate locally first, then create the account
-  // (POST /auth/register). Only moves on if the API call succeeds.
+  // Step 0 -> 1: check the details locally; nothing is sent yet.
   // [CONCEPT: Form validation] validateDetails returns {} when everything passes.
   const submitDetails = () => {
     const errors = validateDetails(form);
     setFieldErrors(errors);
+    if (!Object.keys(errors).length) {
+      setError('');
+      setStep(WORKSPACE);
+    }
+  };
+
+  // Step 1 -> 2: validate the workspace, then create the account
+  // (POST /auth/register). Only moves on if the API call succeeds.
+  const submitWorkspace = () => {
+    const errors = validateWorkspace(form);
+    setFieldErrors(errors);
     if (Object.keys(errors).length) return;
     run(async () => {
-      // [CONCEPT: Service layer] authApi maps fullName to the backend's full_name.
+      // [CONCEPT: Service layer] authApi maps these to the backend's snake_case fields.
       await authApi.register({
         fullName: `${form.firstName.trim()} ${form.lastName.trim()}`,
         email,
         password: form.password,
+        buildingId: form.buildingId,
+        floorId: form.floorId,
+        seatId: form.spotKind === 'none' ? null : form.seatId,
       });
-      setStep(1);
+      setStep(VERIFY);
     });
   };
 
-  // Step 1 -> done. Email verification is currently a placeholder in authApi
+  // Step 2 -> done. Email verification is currently a placeholder in authApi
   // that accepts any code (see services/authApi.js).
   const verifyEmail = (code) => run(async () => {
     await authApi.verifyEmail({ email, code });
@@ -122,7 +172,7 @@ export default function RegisterPage() {
       maxWidth={960}
       kicker={stepLabel}
       title={title}
-      blurb={step === 1 ? `Enter the 6-digit code for ${email} to confirm the address is yours.` : blurb}
+      blurb={step === VERIFY ? `Enter the 6-digit code for ${email} to confirm the address is yours.` : blurb}
       // [CONCEPT: Responsive design] AuthShell shows `rail` (vertical stepper) on
       // wide screens and `mobileRail` (one line plus a progress bar) on narrow ones.
       rail={<ProgressRail steps={STEPS} activeStep={step} />}
@@ -140,7 +190,20 @@ export default function RegisterPage() {
 
       {/* [CONCEPT: Conditional rendering] Exactly one step component renders, chosen by `step`. Each gets only the props it needs. */}
       {step === 0 && <DetailsStep form={form} onChange={updateField} errors={fieldErrors} loading={loading} onSubmit={submitDetails} />}
-      {step === 1 && <VerifyEmailStep loading={loading} onSubmit={verifyEmail} onResend={resendEmail} />}
+      {step === WORKSPACE && (
+        <WorkspaceStep
+          form={form}
+          onChange={updateField}
+          errors={fieldErrors}
+          loading={loading}
+          onSubmit={submitWorkspace}
+          onBack={() => { setError(''); setStep(0); }}
+          locations={locations}
+          locationsError={locationsError}
+          onRetry={loadLocations}
+        />
+      )}
+      {step === VERIFY && <VerifyEmailStep loading={loading} onSubmit={verifyEmail} onResend={resendEmail} />}
       {step === DONE && <DoneStep name={`${form.firstName} ${form.lastName}`.trim()} email={email} />}
     </AuthShell>
   );

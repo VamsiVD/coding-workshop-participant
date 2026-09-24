@@ -231,10 +231,11 @@ export default function ReportIncidentPage({ showDuplicateCheck = true, showWork
                     {(building?.floors ?? []).map((f) => <MenuItem key={f.id} value={f.id}>{floorLabel(f)}</MenuItem>)}
                   </Select>
                 </Field>
-                <Field id="seat" label="Seat" optional>
+                <Field id="seat" label="Desk or room" optional>
                   <Select id="seat" value={form.seatId} onChange={(e) => set('seatId', e.target.value)} displayEmpty disabled={!floor?.seats.length} sx={inputSx}>
-                    <MenuItem value="">{floor?.seats.length ? 'Not at a seat' : 'No seats listed'}</MenuItem>
-                    {(floor?.seats ?? []).map((x) => <MenuItem key={x.id} value={x.id}>{x.code}</MenuItem>)}
+                    <MenuItem value="">{floor?.seats.length ? 'Not at a desk or room' : 'No desks or rooms listed'}</MenuItem>
+                    {/* Rooms share the list with desks (a room is a kind of seat), so they are labelled. */}
+                    {(floor?.seats ?? []).map((x) => <MenuItem key={x.id} value={x.id}>{x.kind === 'room' ? `${x.code} (room)` : x.code}</MenuItem>)}
                   </Select>
                 </Field>
               </Box>

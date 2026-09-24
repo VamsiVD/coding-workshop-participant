@@ -127,14 +127,32 @@ def get_seat(conn: Connection, seat_id: int) -> dict:
     return seat
 
 
+def _normalise_code(code: str, kind: str) -> str:
+    """Desk codes are upper-cased, like building codes, so the unique
+    constraint means what it says. Room names keep the case they were given."""
+    return code.upper() if kind == "desk" else code
+
+
 def create_seat(conn: Connection, floor_id: int, payload) -> dict:
+    """Create a desk or room on a floor. 404 for an unknown floor; a duplicate
+    code on the same floor is a 409 from the unique constraint."""
     get_floor(conn, floor_id)
-    return repo.create_seat(conn, floor_id=floor_id, code=payload.code)
+    return repo.create_seat(
+        conn,
+        floor_id=floor_id,
+        code=_normalise_code(payload.code, payload.kind),
+        kind=payload.kind,
+    )
 
 
 def update_seat(conn: Connection, seat_id: int, payload) -> dict:
-    get_seat(conn, seat_id)
-    return repo.update_seat(conn, seat_id, payload.model_dump(exclude_unset=True))
+    """Rename a desk or room, or change its kind. 404 if it does not exist."""
+    seat = get_seat(conn, seat_id)
+    changes = payload.model_dump(exclude_unset=True)
+    if changes.get("code"):
+        # The kind being set wins over the current one when both apply.
+        changes["code"] = _normalise_code(changes["code"], changes.get("kind") or seat["kind"])
+    return repo.update_seat(conn, seat_id, changes)
 
 
 def delete_seat(conn: Connection, seat_id: int) -> None:

@@ -9,8 +9,9 @@ import logging
 from psycopg import Connection
 
 from app.core.config import get_settings
-from app.core.errors import AuthenticationError, ConflictError
+from app.core.errors import AuthenticationError, ConflictError, ValidationError
 from app.core.security import create_access_token, hash_password, verify_password
+from app.repositories import facilities as facilities_repo
 from app.repositories import users as users_repo
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserOut
 
@@ -25,6 +26,29 @@ _SIGN_IN_FAILED = "The email address or password is incorrect."
 _TIMING_HASH = "$2b$12$C6UzMDM.H6dfI/f/IKcEe.7Zt0VxQXqFXJZmqJ0lQZ3mI9Rt8BCXu"
 
 
+def _check_location(conn: Connection, payload: RegisterRequest) -> None:
+    """Refuse a workplace that does not exist or does not hang together.
+
+    The composite foreign keys would refuse it too, but as a bare 409; this
+    names the field so the form can show the message beside it.
+    """
+    if payload.building_id is not None:
+        building = facilities_repo.get_building(conn, payload.building_id)
+        if building is None or not building["is_active"]:
+            message = "Choose a building from the list."
+            raise ValidationError(message, {"building_id": message})
+    if payload.floor_id is not None:
+        floor = facilities_repo.get_floor(conn, payload.floor_id)
+        if floor is None or floor["building_id"] != payload.building_id:
+            message = "That floor is not in the chosen building."
+            raise ValidationError(message, {"floor_id": message})
+    if payload.seat_id is not None:
+        seat = facilities_repo.get_seat(conn, payload.seat_id)
+        if seat is None or seat["floor_id"] != payload.floor_id:
+            message = "That desk or room is not on the chosen floor."
+            raise ValidationError(message, {"seat_id": message})
+
+
 def register(conn: Connection, payload: RegisterRequest) -> UserOut:
     """Self-registration always produces an employee.
 
@@ -37,12 +61,16 @@ def register(conn: Connection, payload: RegisterRequest) -> UserOut:
     if users_repo.exists_by_email(conn, payload.email):
         raise ConflictError("An account with this email address already exists.")
 
+    _check_location(conn, payload)
     user = users_repo.create(
         conn,
         email=payload.email,
         password_hash=hash_password(payload.password),
         full_name=payload.full_name,
         role="employee",
+        building_id=payload.building_id,
+        floor_id=payload.floor_id,
+        seat_id=payload.seat_id,
     )
     logger.info("user registered id=%s", user["id"])
     return UserOut(**user)
