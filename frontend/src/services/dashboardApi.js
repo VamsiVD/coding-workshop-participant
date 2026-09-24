@@ -64,9 +64,14 @@ function fromDetail(d, notes) {
     buildingId: d.location.building_id,
     floorId: d.location.floor_id,
     blockedReason: d.blocked_reason ?? undefined,
+    // For the reporter's edit form (only offered while the ticket is Open).
+    description: d.description,
+    categoryId: d.category.id,
     notes: notes.map((n) => ({
       id: n.id,
       author: n.author.full_name,
+      // authorId is kept so "mine" (who may edit or delete the note) can be re-checked against the session.
+      authorId: n.author.id,
       mine: n.author.id === me,
       createdAt: n.created_at,
       text: n.body,
@@ -150,6 +155,28 @@ const api = {
   },
   // Placeholder: toggles locally only; nothing is saved.
   setAffected: async (ref, affected) => ({ affectsMe: affected }),
+  // Categories for the edit form's picker. -> [{ id, label }]
+  listCategories: async () => (await request('/categories')).map((c) => ({ id: c.id, label: c.label })),
+  // changes: any of { title, description, categoryId }. The server allows the
+  // reporter this only while the ticket is Open (403 otherwise). Only the keys
+  // given are sent; the location is not edited from the dashboard.
+  updateTicket: async (ref, changes) => {
+    const body = {};
+    if (changes.title !== undefined) body.title = changes.title.trim();
+    if (changes.description !== undefined) body.description = changes.description.trim();
+    if (changes.categoryId !== undefined) body.category_id = changes.categoryId;
+    await request(`/incidents/${toId(ref)}`, { method: 'PATCH', body });
+    return getTicket(ref);
+  },
+  // The author edits or deletes their own note; both return the refreshed Ticket.
+  editNote: async (ref, noteId, text) => {
+    await request(`/notes/${noteId}`, { method: 'PATCH', body: { body: text } });
+    return getTicket(ref);
+  },
+  deleteNote: async (ref, noteId) => {
+    await request(`/notes/${noteId}`, { method: 'DELETE' });
+    return getTicket(ref);
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -162,7 +189,7 @@ let db = {
   stats: { avgFixDays: 2.8 },
   location: 'HQ North · Munich · Floor 3 · Seat 3.14',
   tickets: [
-    { ref: 'INC-0419', title: 'Second monitor won’t turn on', category: 'Monitor', status: 'Open', priority: 'Medium', engineer: null, createdAt: ago(1), updatedAt: ago(1), unreadCount: 0, escalationRequested: false, seat: '3.14',
+    { ref: 'INC-0419', title: 'Second monitor won’t turn on', category: 'Monitor', categoryId: 1, description: 'Second monitor stays black after the weekend. Cable reseated.', status: 'Open', priority: 'Medium', engineer: null, createdAt: ago(1), updatedAt: ago(1), unreadCount: 0, escalationRequested: false, seat: '3.14',
       notes: [{ id: 1, author: 'M. Okafor', mine: true, createdAt: ago(1), text: 'Second monitor stays black after the weekend. Cable reseated.' }] },
     { ref: 'INC-0412', title: 'Air conditioning not cooling, east wing', category: 'Temperature / HVAC', status: 'In Progress', priority: 'High', engineer: 'A. Klein', createdAt: ago(48), updatedAt: ago(3), unreadCount: 1, escalationRequested: false,
       notes: [
@@ -188,6 +215,8 @@ const wait = (ms = 200) => new Promise((r) => setTimeout(r, ms));
 // Note: unlike the mock getTicket, patch returns the stored object itself, not a structuredClone copy.
 const patch = (ref, p) => { db = { ...db, tickets: db.tickets.map((t) => (t.ref === ref ? { ...t, ...p, updatedAt: new Date().toISOString() } : t)) }; return db.tickets.find((t) => t.ref === ref); };
 const find = (ref) => db.tickets.find((t) => t.ref === ref);
+// Picker choices for the edit form; the labels match the mock tickets' categories.
+const MOCK_CATEGORIES = ['Monitor', 'Temperature / HVAC', 'Desk or chair', 'Lighting', 'Wi-Fi'].map((label, n) => ({ id: n + 1, label }));
 
 const mocks = {
   getDashboard: async () => { await wait(); return structuredClone(db); },
@@ -203,6 +232,16 @@ const mocks = {
     const n = db.nearby.find((x) => x.ref === ref);
     return { affectedCount: n.affectedCount, affectsMe: n.affectsMe };
   },
+  listCategories: async () => { await wait(100); return structuredClone(MOCK_CATEGORIES); },
+  updateTicket: async (ref, changes) => {
+    await wait();
+    const c = { ...changes };
+    // The real backend returns the new label itself; the mock looks it up.
+    if (c.categoryId !== undefined) c.category = MOCK_CATEGORIES.find((x) => x.id === c.categoryId)?.label ?? find(ref).category;
+    return patch(ref, c);
+  },
+  editNote: async (ref, noteId, text) => { await wait(); return patch(ref, { notes: find(ref).notes.map((n) => (n.id === noteId ? { ...n, text } : n)) }); },
+  deleteNote: async (ref, noteId) => { await wait(); return patch(ref, { notes: find(ref).notes.filter((n) => n.id !== noteId) }); },
 };
 
 // Same method names and shapes either way, so DashboardPage does not know which one it got.

@@ -10,7 +10,7 @@ const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
 // EngineerIncident: { ref, id, title, buildingName, floor, seat, category, status, priority,
 //   assigneeId, reporter, description, blockedReason, requestedByMe, createdAt, notes, detailLoaded }
-// notes: [{ id, author, mine, text, createdAt }], newest first. Pool rows carry no notes.
+// notes: [{ id, author, authorId, mine, text, createdAt }], newest first. Pool rows carry no notes.
 
 // Reverse of STATUS_LABEL ('In Progress' -> 'in_progress'), for sending a status back.
 const STATUS_KEY = Object.fromEntries(Object.entries(STATUS_LABEL).map(([k, v]) => [v, k]));
@@ -54,20 +54,12 @@ function fromDetail(d, notes, myId) {
     }),
     description: d.description,
     notes: [
-      ...notes.map((n) => ({ id: n.id, author: n.author.full_name, mine: n.author.id === myId, text: n.body, createdAt: n.created_at })),
-      { id: `${d.id}-description`, author: d.reporter.full_name, mine: false, text: d.description, createdAt: d.created_at },
+      ...notes.map((n) => ({ id: n.id, author: n.author.full_name, authorId: n.author.id, mine: n.author.id === myId, text: n.body, createdAt: n.created_at })),
+      // Not a real note (no authorId, never `mine`), so it cannot be edited or deleted.
+      { id: `${d.id}-description`, author: d.reporter.full_name, authorId: null, mine: false, text: d.description, createdAt: d.created_at },
     ],
     detailLoaded: true,
   };
-}
-
-// The backend allows Open -> In Progress, In Progress -> Blocked/Resolved and
-// Blocked -> In Progress. The design offers Blocked and Resolved from any state,
-// so those moves go through In Progress first, as the workflow requires.
-export function statusPath(from, to) {
-  if (from === to) return [];
-  if (to !== 'In Progress' && from !== 'In Progress') return ['In Progress', to];
-  return [to];
 }
 
 // Assigned work is paged through (capped at 5 x 100) like the admin list.
@@ -124,22 +116,29 @@ const api = {
   },
   // status: 'In Progress' | 'Blocked' | 'Resolved'. The reason is stored on the
   // status change and also posted as a note, because notes are what the
-  // reporter reads on their dashboard.
+  // reporter reads on their dashboard. One call does it all: the server adds
+  // the note in the same transaction, and a move to Blocked or Resolved from
+  // Open (or Resolved from Blocked) passes through In Progress on the server.
+  // `from` is no longer needed here; it is kept so callers and the mock share a signature.
   updateStatus: async (ref, from, status, reason, myId) => {
-    const id = toId(ref);
-    for (const step of statusPath(from, status)) {
-      await request(`/incidents/${id}/status`, {
-        method: 'POST',
-        body: { status: STATUS_KEY[step], reason: step === status ? reason || null : null },
-      });
-    }
-    if (reason) {
-      await request(`/incidents/${id}/notes`, { method: 'POST', body: { body: `${status}: ${reason}` } });
-    }
+    await request(`/incidents/${toId(ref)}/status`, {
+      method: 'POST',
+      body: { status: STATUS_KEY[status], reason: reason || null, note: reason ? `${status}: ${reason}` : null },
+    });
     return getIncident(ref, myId);
   },
   addNote: async (ref, text, myId) => {
     await request(`/incidents/${toId(ref)}/notes`, { method: 'POST', body: { body: text } });
+    return getIncident(ref, myId);
+  },
+  // The author edits or deletes their own note (the server checks that too).
+  // Both return the refreshed incident, like addNote.
+  editNote: async (ref, noteId, text, myId) => {
+    await request(`/notes/${noteId}`, { method: 'PATCH', body: { body: text } });
+    return getIncident(ref, myId);
+  },
+  deleteNote: async (ref, noteId, myId) => {
+    await request(`/notes/${noteId}`, { method: 'DELETE' });
     return getIncident(ref, myId);
   },
 };
@@ -169,7 +168,7 @@ let db = [
 const patch = (ref, p) => { db = db.map((i) => (i.ref === ref ? { ...i, ...p } : i)); return db.find((i) => i.ref === ref); };
 const note = (ref, text) => {
   const i = db.find((x) => x.ref === ref);
-  return patch(ref, { notes: [{ id: `${ref}-${Date.now()}`, author: 'S. Raman', mine: true, text, createdAt: new Date().toISOString() }, ...i.notes] });
+  return patch(ref, { notes: [{ id: `${ref}-${Date.now()}`, author: 'S. Raman', authorId: ME, mine: true, text, createdAt: new Date().toISOString() }, ...i.notes] });
 };
 
 const mocks = {
@@ -186,6 +185,15 @@ const mocks = {
     return note(ref, status === 'In Progress' ? 'Started work on this.' : `${status}: ${reason}`);
   },
   addNote: async (ref, text) => { await wait(); return note(ref, text); },
+  // [CONCEPT: Immutable update] Edit and delete rebuild the notes array instead of changing a note in place.
+  editNote: async (ref, noteId, text) => {
+    await wait();
+    return patch(ref, { notes: db.find((x) => x.ref === ref).notes.map((n) => (n.id === noteId ? { ...n, text } : n)) });
+  },
+  deleteNote: async (ref, noteId) => {
+    await wait();
+    return patch(ref, { notes: db.find((x) => x.ref === ref).notes.filter((n) => n.id !== noteId) });
+  },
 };
 
 export const engineerApi = USE_MOCKS ? mocks : api;

@@ -14,13 +14,17 @@ since Aurora is reachable only from inside the VPC:
 Add `"seed": true` to load `db/init/02_seed.sql`, and `"dummy": true` to also
 load the bulk data in `db/seed_dummy.sql`.
 
+TEMPORARY: `{"make_admin": "<email>"}` promotes that account to administrator
+(see `make_admin.py` and `bin/make-admin.sh`).
+
 Function URL events always carry `requestContext`, so a browser request can
-never reach the migration path.
+never reach either path.
 """
 
 from mangum import Mangum
 
 from app.main import app
+from make_admin import make_admin
 from migrate import migrate
 
 # The pool is opened lazily on first use, so the ASGI lifespan is not needed.
@@ -35,6 +39,10 @@ def handler(event, context):
     """
     # Only the presence of the key is checked, so {"migrate": false} still
     # migrates. That is harmless, because every step skips what already exists.
-    if isinstance(event, dict) and "migrate" in event and "requestContext" not in event:
-        return migrate(seed=bool(event.get("seed")), dummy=bool(event.get("dummy")))
+    if isinstance(event, dict) and "requestContext" not in event:
+        if "migrate" in event:
+            return migrate(seed=bool(event.get("seed")), dummy=bool(event.get("dummy")))
+        # TEMPORARY: remove with make_admin.py.
+        if "make_admin" in event:
+            return make_admin(event["make_admin"])
     return _asgi(event, context)

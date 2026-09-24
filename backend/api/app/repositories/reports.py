@@ -8,6 +8,7 @@ indexes on `incidents` exist.
 injected as a bound-parameter condition, never as user input.
 """
 
+from datetime import datetime
 from typing import Any
 
 from psycopg import Connection
@@ -16,7 +17,8 @@ from psycopg import Connection
 def _where(scope_clause: str | None, extra: list[str] | None = None) -> str:
     """Join the role scope and any fixed extra conditions into one WHERE.
 
-    `extra` holds literal SQL written in this module, never request data.
+    `extra` holds literal SQL written in this module, never request data;
+    values reach it only as bound parameters.
     Returns an empty string when there is nothing to filter on.
     """
     conditions = [
@@ -187,21 +189,36 @@ _TIMES = """
 
 
 def response_times(
-    conn: Connection, *, scope_clause: str | None, scope_params: dict
+    conn: Connection,
+    *,
+    scope_clause: str | None,
+    scope_params: dict,
+    created_from: datetime | None = None,
+    created_to: datetime | None = None,
 ) -> dict:
     """Averages overall and per priority.
 
     The median is reported alongside the mean because a handful of incidents
     left open for weeks drags an average far from what people experience.
+
+    `created_from` / `created_to` limit the figures to incidents reported in
+    that window; the BRIN index on created_at serves the range.
     """
-    where = _where(scope_clause)
+    extra, params = [], dict(scope_params)
+    if created_from is not None:
+        extra.append("i.created_at >= %(created_from)s")
+        params["created_from"] = created_from
+    if created_to is not None:
+        extra.append("i.created_at <= %(created_to)s")
+        params["created_to"] = created_to
+    where = _where(scope_clause, extra)
     with conn.cursor() as cur:
-        cur.execute(f"SELECT {_TIMES} FROM incidents i {where}", scope_params)
+        cur.execute(f"SELECT {_TIMES} FROM incidents i {where}", params)
         overall = dict(cur.fetchone())
 
         cur.execute(
             f"SELECT priority, {_TIMES} FROM incidents i {where} GROUP BY priority",
-            scope_params,
+            params,
         )
         # Nest the timing columns under `times`, leaving priority as the key.
         by_priority = [

@@ -57,11 +57,12 @@ def delete_building(conn: Connection, building_id: int) -> None:
     has floors or incidents, pointing the caller at deactivation instead."""
     get_building(conn, building_id)
     usage = repo.building_usage(conn, building_id)
-    if usage["floors"] or usage["incidents"]:
+    if usage["floors"] or usage["incidents"] or usage["users"]:
         raise ConflictError(
-            f"This building has {usage['floors']} floor(s) and "
-            f"{usage['incidents']} incident(s). Deactivate it instead of "
-            "deleting it, so the history is kept."
+            f"This building has {usage['floors']} floor(s), "
+            f"{usage['incidents']} incident(s) and {usage['users']} person(s) "
+            "working in it. Deactivate it instead of deleting it, so the history "
+            "is kept."
         )
     repo.delete_building(conn, building_id)
 
@@ -101,10 +102,11 @@ def delete_floor(conn: Connection, floor_id: int) -> None:
     seats or incidents; floors have no active flag, so the data stays."""
     get_floor(conn, floor_id)
     usage = repo.floor_usage(conn, floor_id)
-    if usage["seats"] or usage["incidents"]:
+    if usage["seats"] or usage["incidents"] or usage["users"]:
         raise ConflictError(
-            f"This floor has {usage['seats']} seat(s) and "
-            f"{usage['incidents']} incident(s), so it cannot be deleted."
+            f"This floor has {usage['seats']} desk(s) or room(s), "
+            f"{usage['incidents']} incident(s) and {usage['users']} person(s) "
+            "working on it, so it cannot be deleted."
         )
     repo.delete_floor(conn, floor_id)
 
@@ -152,6 +154,9 @@ def update_seat(conn: Connection, seat_id: int, payload) -> dict:
     if changes.get("code"):
         # The kind being set wins over the current one when both apply.
         changes["code"] = _normalise_code(changes["code"], changes.get("kind") or seat["kind"])
+    elif changes.get("kind") == "desk" and seat["kind"] != "desk":
+        # A room turned into a desk takes the desk spelling of its code.
+        changes["code"] = _normalise_code(seat["code"], "desk")
     return repo.update_seat(conn, seat_id, changes)
 
 
@@ -159,10 +164,10 @@ def delete_seat(conn: Connection, seat_id: int) -> None:
     """Delete a seat. Raises ConflictError (409) while incidents name it."""
     get_seat(conn, seat_id)
     usage = repo.seat_usage(conn, seat_id)
-    if usage["incidents"]:
+    if usage["incidents"] or usage["users"]:
         raise ConflictError(
-            f"This seat has {usage['incidents']} incident(s) against it, so it "
-            "cannot be deleted."
+            f"This desk or room has {usage['incidents']} incident(s) against it "
+            f"and is the desk of {usage['users']} person(s), so it cannot be deleted."
         )
     repo.delete_seat(conn, seat_id)
 

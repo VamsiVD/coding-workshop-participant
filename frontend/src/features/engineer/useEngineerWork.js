@@ -64,5 +64,9 @@ export default function useEngineerWork() {
     withdrawRequest: (ref) => run(() => engineerApi.withdrawRequest(ref)),
     updateStatus: (ref, status, reason) => run(() => engineerApi.updateStatus(ref, find(ref)?.status, status, reason, myId)),
     addNote: (ref, text) => run(() => engineerApi.addNote(ref, text, myId)),
+    // Editing and deleting my own notes resolve true or false instead of rejecting,
+    // so the drawer can keep the edit box open after a failure (the error shows above).
+    editNote: (ref, noteId, text) => run(() => engineerApi.editNote(ref, noteId, text, myId)).then(() => true, () => false),
+    deleteNote: (ref, noteId) => run(() => engineerApi.deleteNote(ref, noteId, myId)).then(() => true, () => false),
   };
 }

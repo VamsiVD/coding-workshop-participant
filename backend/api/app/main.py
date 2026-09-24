@@ -22,6 +22,7 @@ from app.api.routes import (
     incidents,
     notes,
     reports,
+    users,
 )
 from app.core.config import get_settings
 from app.core.db import close_pool, connection, get_pool
@@ -120,5 +121,6 @@ for module in (
     incidents,
     notes,
     reports,
+    users,
 ):
     app.include_router(module.router, prefix="/api")

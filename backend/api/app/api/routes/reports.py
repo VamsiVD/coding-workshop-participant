@@ -7,9 +7,12 @@ figures and an administrator the whole organisation's.
 HTTP layer only: the scoping and shaping live in `app.services.reports`.
 """
 
+from datetime import datetime
+
 from fastapi import APIRouter, Query
 
 from app.core.deps import AdminUser, CurrentUserDep, DbConnection
+from app.core.errors import ValidationError
 from app.schemas.reports import (
     AttentionReport,
     CategoryReport,
@@ -49,9 +52,23 @@ def hotspots(
 
 
 @router.get("/reports/response-times", response_model=ResponseTimeReport)
-def response_times(conn: DbConnection, user: CurrentUserDep):
-    """Q3. Time to acknowledge, assign and resolve, overall and by priority."""
-    return service.response_times(conn, user)
+def response_times(
+    conn: DbConnection,
+    user: CurrentUserDep,
+    created_from: datetime | None = None,
+    created_to: datetime | None = None,
+):
+    """Q3. Time to acknowledge, assign and resolve, overall and by priority.
+
+    `created_from` / `created_to` restrict it to incidents reported in that
+    window, as on GET /incidents.
+    """
+    # An inverted range would silently report nothing; say so instead.
+    if created_from and created_to and created_from > created_to:
+        raise ValidationError("created_from must be on or before created_to.")
+    return service.response_times(
+        conn, user, created_from=created_from, created_to=created_to
+    )
 
 
 @router.get("/reports/engineer-workload", response_model=WorkloadReport)

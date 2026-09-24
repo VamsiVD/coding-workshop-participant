@@ -1,38 +1,65 @@
 // Right-hand drawer showing one of the employee's own tickets: progress,
 // details and notes, plus the reporter's actions (confirm or reopen a fix,
-// request escalation, add a note). Actions are the page's handlers.
-import { useState } from 'react';
+// request escalation, add a note, correct the details while the ticket is
+// Open, edit or delete their own notes). Actions are the page's handlers.
+import { useEffect, useState } from 'react';
 import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Drawer, IconButton, TextField, Typography } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import { admin } from '../../../theme/adminTheme';
 import { flowBars, timeAgo } from '../ticketModel';
+import NoteItem from './NoteItem';
+import IncidentDetailsForm from './IncidentDetailsForm';
 
-export default function TicketDrawer({ ticket, location, open, onClose, onConfirm, onReopen, onEscalate, onAddNote, busy }) {
+// [CONCEPT: Props] onAddNote, onEditTicket, onEditNote and onDeleteNote resolve true on success and
+// false on failure, so the drawer only clears a draft or closes an editor once the server has it.
+// `categories` ([{ id, label }] or null) feeds the edit form; onNeedCategories asks the page to load them.
+export default function TicketDrawer({ ticket, location, open, onClose, onConfirm, onReopen, onEscalate, onAddNote, onEditTicket, onEditNote, onDeleteNote, categories, onNeedCategories, busy }) {
   // [CONCEPT: useState] Local drafts only: the note text, and the escalation dialog's open flag and reason.
-  // These are not reset when a different ticket opens, so an unsent draft carries over.
   const [draft, setDraft] = useState('');
   const [escalateOpen, setEscalateOpen] = useState(false);
   const [escalateReason, setEscalateReason] = useState('');
+  // True while the details edit form replaces the title block.
+  const [editing, setEditing] = useState(false);
+
+  // [CONCEPT: useEffect] Keyed on the ref, not the object: opening a different ticket clears the drafts
+  // (so an unsent note cannot carry over to the wrong ticket), but a refresh of the same ticket does not.
+  useEffect(() => {
+    setDraft('');
+    setEscalateOpen(false);
+    setEscalateReason('');
+    setEditing(false);
+  }, [ticket?.ref]);
 
   // [CONCEPT: Conditional rendering] Early return after all hooks (hooks must run in the same order every render).
   if (!ticket) return null;
   // Closed is final: no notes. Escalation only makes sense while work is still outstanding.
   const canNote = ticket.status !== 'Closed';
   const canEscalate = ticket.status !== 'Resolved' && ticket.status !== 'Closed';
+  // The reporter may correct the details only until work starts (the server enforces the same rule).
+  const canEdit = ticket.status === 'Open';
 
   // [CONCEPT: Form submission] preventDefault stops the browser's full-page form post; the note goes through the API instead.
-  // The draft is cleared after the await. act() in the page never rejects, so it is cleared even when the call failed.
+  // The draft is cleared only when the page reports the note was saved, so a failed send keeps the text.
   const send = async (e) => {
     e.preventDefault();
     if (!draft.trim()) return;
-    await onAddNote(ticket.ref, draft.trim());
-    setDraft('');
+    if (await onAddNote(ticket.ref, draft.trim())) setDraft('');
+  };
+
+  // Opens the details editor and asks the page for the category list the first time.
+  const startEdit = () => {
+    onNeedCategories();
+    setEditing(true);
+  };
+  const saveDetails = async (changes) => {
+    if (await onEditTicket(ticket.ref, changes)) setEditing(false);
   };
 
   // [CONCEPT: Form validation] A reason is required; the Send request button is also disabled while it is blank.
+  // The dialog stays open with the reason if the request failed.
   const submitEscalation = async () => {
     if (!escalateReason.trim()) return;
-    await onEscalate(ticket.ref, escalateReason.trim());
+    if (!(await onEscalate(ticket.ref, escalateReason.trim()))) return;
     setEscalateOpen(false);
     setEscalateReason('');
   };
@@ -52,10 +79,22 @@ export default function TicketDrawer({ ticket, location, open, onClose, onConfir
       </Box>
 
       <Box sx={{ p: 2.5, display: 'grid', gap: 2.75 }}>
-        <div>
-          <Typography variant="h3">{ticket.title}</Typography>
-          <Typography sx={{ fontSize: 13.5, mt: 0.5, color: admin.muted }}>{location}{ticket.seat ? ` · Seat ${ticket.seat}` : ''}</Typography>
-        </div>
+        {/* [CONCEPT: Conditional rendering] The edit form replaces the title block while editing. */}
+        {editing ? (
+          <IncidentDetailsForm incident={ticket} categories={categories} busy={busy} onSave={saveDetails} onCancel={() => setEditing(false)} />
+        ) : (
+          <div>
+            <Typography variant="h3">{ticket.title}</Typography>
+            <Typography sx={{ fontSize: 13.5, mt: 0.5, color: admin.muted }}>{location}{ticket.seat ? ` · Seat ${ticket.seat}` : ''}</Typography>
+            {ticket.description && <Typography sx={{ fontSize: 14, mt: 1.25, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{ticket.description}</Typography>}
+            {/* The description arrives with the full ticket, so Edit waits for it (a list row has none). */}
+            {canEdit ? (
+              <Button size="small" variant="outlined" color="secondary" disabled={busy || ticket.description === undefined} onClick={startEdit} sx={{ mt: 1.25 }}>Edit details</Button>
+            ) : (
+              <Typography sx={{ fontSize: 12.5, mt: 1, color: admin.faint }}>Details can’t be changed once work has started. Add a note instead.</Typography>
+            )}
+          </div>
+        )}
 
         {/* [CONCEPT: Accessibility] The bars are purely visual, so role="img" with an aria-label reads the status as one phrase. */}
         <Box role="img" aria-label={`Status: ${ticket.status}`} sx={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '3px' }}>
@@ -115,11 +154,19 @@ export default function TicketDrawer({ ticket, location, open, onClose, onConfir
 
         <Box sx={{ display: 'grid', gap: 1.25 }}>
           <Typography variant="h4">Activity</Typography>
+          {/* [CONCEPT: Component composition] NoteItem draws the note and, for my own notes on a ticket that is
+              not Closed, inline Edit and Delete. */}
           {ticket.notes?.map((n) => (
-            <Box key={n.id} sx={{ borderLeft: `2px solid ${n.mine ? admin.tan : admin.red}`, py: 0.25, pl: 1.5, fontSize: 14, lineHeight: 1.45 }}>
-              <Box sx={{ fontSize: 12, color: admin.muted, mb: 0.25 }}><Box component="span" sx={{ fontWeight: 500, color: admin.ink }}>{n.author}</Box> · {timeAgo(n.createdAt)}</Box>
-              {n.text}
-            </Box>
+            <NoteItem
+              key={n.id}
+              note={n}
+              when={timeAgo(n.createdAt)}
+              canManage={n.mine && canNote}
+              busy={busy}
+              borderColor={n.mine ? admin.tan : admin.red}
+              onSave={(id, text) => onEditNote(ticket.ref, id, text)}
+              onDelete={(id) => onDeleteNote(ticket.ref, id)}
+            />
           ))}
           {/* A real <form>, so pressing Enter in the field submits it. */}
           {canNote && (

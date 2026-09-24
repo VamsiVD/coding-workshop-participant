@@ -8,6 +8,7 @@ declines the request.
 
 from psycopg import Connection
 
+from app.core.db import transaction
 from app.core.errors import ForbiddenError, NotFoundError, ValidationError
 from app.repositories import assignment_requests as repo
 from app.repositories import engineers as engineers_repo
@@ -63,16 +64,18 @@ def request_job(
     if engineer is None or not engineer["is_active"]:
         raise ForbiddenError("Only an active engineer can request a job.")
 
-    incident = incidents_repo.get_raw(conn, incident_id)
-    if incident is None:
-        raise NotFoundError("Incident not found.")
-    if incident["assignee_id"] is not None:
-        raise ValidationError("This incident has already been assigned.")
-    if incident["status"] != IncidentStatus.OPEN:
-        raise ValidationError("Only open incidents can be requested.")
-
     note = (payload.note or "").strip() or None
-    return repo.upsert(conn, incident_id=incident_id, engineer_id=user.id, note=note)
+    with transaction(conn):
+        # Locked so an assignment cannot slip in between this check and the
+        # insert; assign takes the same lock and clears requests after it.
+        incident = incidents_repo.lock(conn, incident_id)
+        if incident is None:
+            raise NotFoundError("Incident not found.")
+        if incident["assignee_id"] is not None:
+            raise ValidationError("This incident has already been assigned.")
+        if incident["status"] != IncidentStatus.OPEN:
+            raise ValidationError("Only open incidents can be requested.")
+        return repo.upsert(conn, incident_id=incident_id, engineer_id=user.id, note=note)
 
 
 def withdraw(conn: Connection, incident_id: int, user: CurrentUser) -> None:

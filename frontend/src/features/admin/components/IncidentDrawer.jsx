@@ -1,25 +1,34 @@
 // Right-hand drawer showing one incident's details and actions for an admin:
 // assign an engineer, move the status, decide an escalation, answer engineers'
-// job requests, and add notes.
+// job requests, add, edit and delete notes, correct the details, and delete the incident.
 // It holds only form drafts; the incident and all actions come from the page.
 import { useEffect, useState } from 'react';
-import { Box, Button, Chip, Drawer, IconButton, MenuItem, TextField, Typography } from '@mui/material';
+import { Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Drawer, IconButton, MenuItem, TextField, Typography } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import { admin } from '../../../theme/adminTheme';
 import { NEXT_STATUSES, PRIORITY_STYLE, STATUSES, age, isBlocked, isEscalation } from '../adminModel';
+import NoteItem from '../../dashboard/components/NoteItem';
+import IncidentDetailsForm from '../../dashboard/components/IncidentDetailsForm';
 
 // [CONCEPT: Props] `incident` is undefined when nothing is open; the on* callbacks are the hook's actions passed down by the page.
 // `requests` are the pending job requests on this incident (oldest first).
-export default function IncidentDrawer({ incident, engineers, requests = [], onClose, onAssign, onStatus, onDecide, onNote, onApproveRequest, onDeclineRequest }) {
+// onNote, onEditNote, onDeleteNote, onUpdate and onDelete resolve true on success and false on failure.
+// `categories` ([{ id, label }] or null) feeds the edit form; onNeedCategories asks for them to be loaded.
+export default function IncidentDrawer({ incident, engineers, requests = [], categories, onClose, onAssign, onStatus, onDecide, onNote, onEditNote, onDeleteNote, onNeedCategories, onUpdate, onDelete, onApproveRequest, onDeclineRequest }) {
   // [CONCEPT: useState] Local, unsaved text for the note box.
   const [draft, setDraft] = useState('');
   // null: not blocking. A string: the reason being typed for a move to Blocked.
   const [blockReason, setBlockReason] = useState(null);
   // Id of the job request being approved or declined, so its buttons cannot be pressed twice.
   const [answering, setAnswering] = useState(null);
+  // True while the details edit form replaces the title block.
+  const [editing, setEditing] = useState(false);
+  // Delete confirmation dialog: open flag, and whether the delete is in flight.
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   // [CONCEPT: useEffect] Keyed on the ref, not the object: clear the drafts when a different incident opens,
   // but not when the same incident is refreshed after an update.
-  useEffect(() => { setDraft(''); setBlockReason(null); }, [incident?.ref]);
+  useEffect(() => { setDraft(''); setBlockReason(null); setEditing(false); setConfirmDelete(false); }, [incident?.ref]);
 
   // [CONCEPT: Derived state] Everything below is computed from props each render. The `i ?` guards (rather than
   // an early return) keep the Drawer mounted with no incident, so it can animate closed.
@@ -36,7 +45,21 @@ export default function IncidentDrawer({ incident, engineers, requests = [], onC
   const assigneeListed = i ? pickable.some((e) => e.id === i.assigneeId) : true;
 
   // [CONCEPT: Event handling] Handlers are plain closures over the current incident and drafts.
-  const send = () => { if (draft.trim()) { onNote(i.ref, draft.trim()); setDraft(''); } };
+  // The draft is cleared only once the note is saved, so a failed send keeps the text.
+  const send = async () => {
+    if (!draft.trim()) return;
+    if (await onNote(i.ref, draft.trim())) setDraft('');
+  };
+  // Opens the details editor and asks for the category list the first time.
+  const startEdit = () => { onNeedCategories(); setEditing(true); };
+  const saveDetails = async (changes) => { if (await onUpdate(i.ref, changes)) setEditing(false); };
+  // On success the page closes the drawer; on failure the dialog closes and the error toast shows.
+  const confirmDeleteIncident = async () => {
+    setDeleting(true);
+    await onDelete(i.ref);
+    setDeleting(false);
+    setConfirmDelete(false);
+  };
   const pickStatus = (s) => {
     if (s === i.status) return;
     // Blocked needs a reason, so ask before sending.
@@ -79,10 +102,21 @@ export default function IncidentDrawer({ incident, engineers, requests = [], onC
           </Box>
 
           <Box sx={{ p: 2.5, display: 'grid', gap: 2.75 }}>
-            <Box>
-              <Typography variant="h3">{i.title}</Typography>
-              <Typography sx={{ fontSize: 13.5, mt: 0.5, color: admin.muted }}>{[i.building, i.floor, i.seat].filter(Boolean).join(' · ')}</Typography>
-            </Box>
+            {/* [CONCEPT: Conditional rendering] The edit form replaces the title block while editing. An admin may edit at any status. */}
+            {editing ? (
+              <IncidentDetailsForm incident={i} categories={categories} busy={false} onSave={saveDetails} onCancel={() => setEditing(false)} />
+            ) : (
+              <Box>
+                <Typography variant="h3">{i.title}</Typography>
+                <Typography sx={{ fontSize: 13.5, mt: 0.5, color: admin.muted }}>{[i.building, i.floor, i.seat].filter(Boolean).join(' · ')}</Typography>
+                {i.description && <Typography sx={{ fontSize: 14, mt: 1.25, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{i.description}</Typography>}
+                <Box sx={{ display: 'flex', gap: 1, mt: 1.25 }}>
+                  {/* The description comes with the full incident, so Edit waits for detailLoaded. */}
+                  <Button size="small" variant="outlined" color="secondary" disabled={!i.detailLoaded} onClick={startEdit}>Edit details</Button>
+                  <Button size="small" variant="text" onClick={() => setConfirmDelete(true)} sx={{ color: admin.red }}>Delete incident</Button>
+                </Box>
+              </Box>
+            )}
 
             {/* Status progress bar: past steps light, current step red (danger when Blocked), future steps grey. */}
             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '3px' }}>
@@ -189,11 +223,18 @@ export default function IncidentDrawer({ incident, engineers, requests = [], onC
               {/* [CONCEPT: Loading and error state] List rows arrive with detailLoaded false and no notes; the page's load(ref) fills them in. */}
               {!i.detailLoaded && <Box sx={{ fontSize: 13, color: admin.muted }}>Loading notes…</Box>}
               {i.detailLoaded && i.notes.length === 0 && <Box sx={{ fontSize: 13, color: admin.muted }}>No notes yet.</Box>}
+              {/* [CONCEPT: Role-based rendering] This page is admin-only and an admin may edit or delete any note. */}
               {i.notes.map((n) => (
-                <Box key={n.id} sx={{ borderLeft: `2px solid ${admin.tanLight}`, py: 0.25, pl: 1.5, fontSize: 14, lineHeight: 1.45 }}>
-                  <Box sx={{ fontSize: 12, color: admin.muted, mb: 0.25 }}><Box component="span" sx={{ fontWeight: 500, color: admin.ink }}>{n.author}</Box> · {age(n.createdAt)} ago</Box>
-                  {n.text}
-                </Box>
+                <NoteItem
+                  key={n.id}
+                  note={n}
+                  when={`${age(n.createdAt)} ago`}
+                  canManage
+                  busy={false}
+                  borderColor={admin.tanLight}
+                  onSave={(id, text) => onEditNote(i.ref, id, text)}
+                  onDelete={(id) => onDeleteNote(i.ref, id)}
+                />
               ))}
               <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
                 <TextField
@@ -211,6 +252,20 @@ export default function IncidentDrawer({ incident, engineers, requests = [], onC
           </Box>
         </Box>
       )}
+
+      {/* [CONCEPT: MUI component] A modal Dialog asks before the permanent delete; Escape or Cancel backs out. */}
+      <Dialog slotProps={{ paper: { sx: { borderRadius: '16px', bgcolor: admin.bg } } }} open={confirmDelete && !!i} onClose={() => !deleting && setConfirmDelete(false)}>
+        <DialogTitle sx={{ fontWeight: 600, fontSize: 20 }}>Delete {i?.ref}?</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ fontSize: 14, lineHeight: 1.5, color: admin.ink }}>
+            “{i?.title}” will be removed for good, with its notes and history. The reporter and engineer will no longer see it. This can’t be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button variant="outlined" color="secondary" disabled={deleting} onClick={() => setConfirmDelete(false)}>Cancel</Button>
+          <Button variant="contained" disabled={deleting} onClick={confirmDeleteIncident}>{deleting ? 'Deleting…' : 'Delete incident'}</Button>
+        </DialogActions>
+      </Dialog>
     </Drawer>
   );
 }

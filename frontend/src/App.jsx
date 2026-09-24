@@ -11,6 +11,7 @@ import ReportIncidentPage from './features/incidents/report/ReportIncidentPage';
 import AdminIncidentsPage from './features/admin/AdminIncidentsPage';
 import EngineerWorkbenchPage from './features/engineer/EngineerWorkbenchPage';
 import AdminEngineersPage from './features/admin/engineers/AdminEngineersPage';
+import AdminFacilitiesPage from './features/admin/facilities/AdminFacilitiesPage';
 
 // Maps the backend's role keys to the text shown under the user's name in the header.
 const ROLE_LABELS = { employee: 'Employee', engineer: 'Engineer', admin: 'Facility admin' };
@@ -99,7 +100,8 @@ function route(path) {
   }
 
   if (path.startsWith('/admin')) {
-    const onEngineers = path.startsWith('/admin/engineers');
+    // Which admin screen: incidents (the default), engineers or facilities.
+    const screen = path.startsWith('/admin/engineers') ? 'engineers' : path.startsWith('/admin/facilities') ? 'facilities' : 'incidents';
     // The server refuses admin calls from other roles; send them home instead
     // of showing an empty console.
     // [CONCEPT: Role-based rendering] A UI guard only; the real protection is the server's role check.
@@ -115,13 +117,16 @@ function route(path) {
           initials={initialsOf(user.full_name)}
           onSignOut={signOut}
           links={[
-            { label: 'Incidents', href: '/admin/incidents', active: !onEngineers },
-            { label: 'Engineers', href: '/admin/engineers', active: onEngineers },
+            { label: 'Incidents', href: '/admin/incidents', active: screen === 'incidents' },
+            { label: 'Engineers', href: '/admin/engineers', active: screen === 'engineers' },
+            { label: 'Facilities', href: '/admin/facilities', active: screen === 'facilities' },
             { label: 'My dashboard', href: '/dashboard' },
           ]}
         />
-        {/* [CONCEPT: Conditional rendering] One admin shell, two screens chosen by the path. */}
-        {onEngineers ? <AdminEngineersPage /> : <AdminIncidentsPage />}
+        {/* [CONCEPT: Conditional rendering] One admin shell, three screens chosen by the path. */}
+        {screen === 'engineers' && <AdminEngineersPage />}
+        {screen === 'facilities' && <AdminFacilitiesPage />}
+        {screen === 'incidents' && <AdminIncidentsPage />}
       </>
     );
   }

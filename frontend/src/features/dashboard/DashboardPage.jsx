@@ -28,6 +28,8 @@ export default function DashboardPage({ user }) {
   const [busy, setBusy] = useState(false);
   // Snackbar text for both success messages and action errors.
   const [toast, setToast] = useState('');
+  // Categories for the drawer's edit form: null until first needed, then [{ id, label }].
+  const [categories, setCategories] = useState(null);
 
   // [CONCEPT: Service layer] dashboardApi hides the HTTP calls (or mocks) and maps backend rows to the UI's ticket shape.
   // [CONCEPT: useCallback] Stable identity, so the effect below runs once on mount rather than every render.
@@ -45,17 +47,27 @@ export default function DashboardPage({ user }) {
   // Shared wrapper for drawer actions: set busy, run the API call, merge the
   // updated ticket it returns, then toast the success message or the error.
   // Not optimistic: the UI changes only after the server answers.
+  // Resolves true on success and false on failure (it never rejects), so the
+  // drawer can keep a draft when the call failed.
   const act = async (fn, message) => {
     setBusy(true);
     try {
       const updated = await fn();
       if (updated?.ref) replaceTicket(updated);
       if (message) setToast(message);
+      return true;
     } catch (e) {
       setToast(e.message);
+      return false;
     } finally {
       setBusy(false);
     }
+  };
+
+  // Loads the category list once, the first time the edit form is opened.
+  const needCategories = () => {
+    if (categories) return;
+    dashboardApi.listCategories().then(setCategories).catch((e) => setToast(e.message));
   };
 
   // Opening a ticket clears its unread badge locally right away; markRead is a
@@ -89,6 +101,10 @@ export default function DashboardPage({ user }) {
     },
     addNote: (ref, text) => act(() => dashboardApi.addNote(ref, text)),
     escalate: (ref, reason) => act(() => dashboardApi.requestEscalation(ref, reason), 'Escalation requested. An admin will review it.'),
+    // Reporter's corrections while the ticket is Open; the server refuses them once work has started.
+    editTicket: (ref, changes) => act(() => dashboardApi.updateTicket(ref, changes), `${ref} updated.`),
+    editNote: (ref, noteId, text) => act(() => dashboardApi.editNote(ref, noteId, text), 'Note updated.'),
+    deleteNote: (ref, noteId) => act(() => dashboardApi.deleteNote(ref, noteId), 'Note deleted.'),
     // Updates `nearby`, not `tickets`: these are other people's incidents. On the
     // real backend setAffected only echoes the value back (nothing is saved yet).
     toggleAffected: async (ref, affected) => {
@@ -167,6 +183,11 @@ export default function DashboardPage({ user }) {
         onReopen={handlers.reopen}
         onEscalate={handlers.escalate}
         onAddNote={handlers.addNote}
+        onEditTicket={handlers.editTicket}
+        onEditNote={handlers.editNote}
+        onDeleteNote={handlers.deleteNote}
+        categories={categories}
+        onNeedCategories={needCategories}
         busy={busy}
       />
 

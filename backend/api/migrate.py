@@ -8,6 +8,9 @@ step checks whether it has already run, so invoking this again is safe.
 later file (`03_...` onwards) is an additive change written to be idempotent
 (`IF NOT EXISTS`), and runs on every invocation; that is how a database
 created before the file existed picks the change up.
+
+The additive files run after any seed data, so those that build on it (demo
+rooms, demo workplaces) find it on the same invocation.
 """
 
 import logging
@@ -46,13 +49,6 @@ def migrate(seed: bool = False, dummy: bool = False) -> dict:
             conn.execute((INIT_DIR / "01_schema.sql").read_text())
             applied.append("01_schema.sql")
 
-        # Additive changes, in filename order. Idempotent, so they run every
-        # time rather than being tracked.
-        for path in sorted(INIT_DIR.glob("*.sql")):
-            if path.name not in ONE_OFF:
-                conn.execute(path.read_text())
-                applied.append(path.name)
-
         if seed:
             # Seed only an empty database, so dev accounts are never mixed into
             # one that already has real users.
@@ -70,6 +66,14 @@ def migrate(seed: bool = False, dummy: bool = False) -> dict:
             if not has_dummy:
                 conn.execute((INIT_DIR.parent / "seed_dummy.sql").read_text())
                 applied.append("seed_dummy.sql")
+
+        # Additive changes, in filename order, after any seed data so the files
+        # that build on it find it. Idempotent, so they run every time rather
+        # than being tracked.
+        for path in sorted(INIT_DIR.glob("*.sql")):
+            if path.name not in ONE_OFF:
+                conn.execute(path.read_text())
+                applied.append(path.name)
 
     logger.info("migration applied: %s", applied or "nothing")
     return {"applied": applied}

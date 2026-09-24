@@ -100,14 +100,13 @@ def update_engineer(conn: Connection, user_id: int, payload) -> dict:
     ):
         raise NotFoundError("That specialisation category does not exist.")
 
-    # full_name lives on the user row, not the profile.
-    # The two writes are not wrapped in one transaction: each commits on its
-    # own, so a failed profile update would still leave the new name.
+    # full_name lives on the user row, not the profile. Both writes commit
+    # together, so a failed profile update does not leave the new name behind.
     full_name = changes.pop("full_name", None)
-    if full_name is not None:
-        users_repo.update_name(conn, user_id, full_name)
-
-    return repo.update_profile(conn, user_id, changes)
+    with transaction(conn):
+        if full_name is not None:
+            users_repo.update_name(conn, user_id, full_name)
+        return repo.update_profile(conn, user_id, changes)
 
 
 def set_own_availability(
@@ -132,16 +131,21 @@ def deactivate_engineer(conn: Connection, user_id: int) -> dict:
     reassigning.
     """
     get_engineer(conn, user_id)
-    # Refused (409) rather than silently orphaning tickets: open, in-progress
-    # and blocked work must be reassigned before the account is switched off.
-    active = repo.active_ticket_count(conn, user_id)
-    if active:
-        raise ConflictError(
-            f"This engineer still has {active} active ticket(s). Reassign them first."
-        )
-    # Deactivation is on the user row, so it also stops the engineer signing
-    # in; the profile row is kept for history.
-    users_repo.set_active(conn, user_id, False)
+    with transaction(conn):
+        # The profile lock makes a concurrent assignment wait (assign takes the
+        # same lock), so the count below cannot go stale before the update.
+        repo.lock(conn, user_id)
+        # Refused (409) rather than silently orphaning tickets: open,
+        # in-progress and blocked work must be reassigned first.
+        active = repo.active_ticket_count(conn, user_id)
+        if active:
+            raise ConflictError(
+                f"This engineer still has {active} active ticket(s). "
+                "Reassign them first."
+            )
+        # Deactivation is on the user row, so it also stops the engineer
+        # signing in; the profile row is kept for history.
+        users_repo.set_active(conn, user_id, False)
     return get_engineer(conn, user_id)
 
 

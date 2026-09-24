@@ -7,7 +7,7 @@ output "api_endpoints" {
   description = "Available API endpoints by function name"
   value = {
     for name, func in local.function_names :
-    func.name => data.aws_caller_identity.this.id == "000000000000" ? module.lambda[name].lambda_function_url : "/api/${func.name}"
+    func.name => data.aws_caller_identity.this.id == "000000000000" ? module.lambda[name].lambda_function_url : (func.name == "api" ? "/api" : "/api/${func.name}")
   }
 }
 

@@ -128,6 +128,13 @@ else
     echo "WARN: AWS Directory Service IP not found"
 fi
 
+# Record the workshop region so later shells deploy to the same place. The
+# participant URL (a Lambda URL) names it; the deploy scripts default
+# AWS_REGION to us-east-1 before calling this script, so the URL comes first.
+URL_REGION=$(echo "$PARTICIPANT_URL" | sed -nE 's#.*lambda-url\.([a-z0-9-]+)\.on\.aws.*#\1#p')
+AWS_REGION="${URL_REGION:-${AWS_REGION:-us-east-1}}"
+echo "INFO: AWS region - $AWS_REGION"
+
 # Create environment configuration file for deployment scripts
 ENVIRONMENT_CONFIG="$PROJECT_ROOT/ENVIRONMENT.config"
 cat > "$ENVIRONMENT_CONFIG" <<EOF
@@ -138,6 +145,7 @@ export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
 export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
 export AWS_SESSION_TOKEN="$AWS_SESSION_TOKEN"
 export AWS_ACCOUNT_ID="$AWS_ACCOUNT_ID"
+export AWS_REGION="$AWS_REGION"
 export AWS_S3_BUCKET="$PROJECT_NAME-tfstate-$PARTICIPANT_ID"
 export PARTICIPANT_ID="$PARTICIPANT_ID"
 export PARTICIPANT_URL="$PARTICIPANT_URL"

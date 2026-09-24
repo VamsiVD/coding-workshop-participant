@@ -6,6 +6,7 @@ import { Box, Button, Drawer, IconButton, TextField, ToggleButton, ToggleButtonG
 import CloseIcon from '@mui/icons-material/Close';
 import { admin } from '../../../theme/adminTheme';
 import { PRIORITY_TAG, flowBars, timeAgo } from '../engineerModel';
+import NoteItem from '../../dashboard/components/NoteItem';
 
 // Wording for the reason box shown before a Blocked or Resolved change is saved.
 const REASON = {
@@ -23,7 +24,8 @@ const Meta = ({ rows }) => (
 );
 
 // [CONCEPT: Props] Everything the drawer changes goes back to the page through callback props.
-export default function EngineerDrawer({ incident, myId, open, onClose, onRequest, onWithdraw, onStatus, onAddNote, busy }) {
+// onEditNote and onDeleteNote resolve true on success and false on failure.
+export default function EngineerDrawer({ incident, myId, open, onClose, onRequest, onWithdraw, onStatus, onAddNote, onEditNote, onDeleteNote, busy }) {
   const [pending, setPending] = useState(null);
   const [reason, setReason] = useState('');
   const [requestNote, setRequestNote] = useState('');
@@ -148,11 +150,18 @@ export default function EngineerDrawer({ incident, myId, open, onClose, onReques
             <Box sx={{ display: 'grid', gap: 1.25 }}>
               <Typography variant="h4">Notes with {incident.reporter}</Typography>
               {!incident.detailLoaded && <Typography sx={{ fontSize: 13.5, color: admin.muted }}>Loading notes…</Typography>}
+              {/* [CONCEPT: Role-based rendering] Only my own notes get Edit and Delete (`mine` compares the author with my id). */}
               {incident.notes?.map((n) => (
-                <Box key={n.id} sx={{ borderLeft: `2px solid ${n.mine ? admin.red : admin.tan}`, py: 0.25, pl: 1.5, fontSize: 14, lineHeight: 1.45 }}>
-                  <Box sx={{ fontSize: 12, color: admin.muted, mb: 0.25 }}><Box component="span" sx={{ fontWeight: 500, color: admin.ink }}>{n.author}</Box> · {timeAgo(n.createdAt)}</Box>
-                  {n.text}
-                </Box>
+                <NoteItem
+                  key={n.id}
+                  note={n}
+                  when={timeAgo(n.createdAt)}
+                  canManage={n.mine}
+                  busy={busy}
+                  borderColor={n.mine ? admin.red : admin.tan}
+                  onSave={(id, text) => onEditNote(incident.ref, id, text)}
+                  onDelete={(id) => onDeleteNote(incident.ref, id)}
+                />
               ))}
               <Box component="form" onSubmit={send} sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
                 <TextField slotProps={{ htmlInput: { 'aria-label': 'Write to the reporter' } }} size="small" fullWidth placeholder="Write to the reporter" value={draft} onChange={(e) => setDraft(e.target.value)} />

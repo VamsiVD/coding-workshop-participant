@@ -19,6 +19,7 @@ from app.repositories import assignment_requests as requests_repo
 from app.repositories import engineers as engineers_repo
 from app.repositories import events as events_repo
 from app.repositories import incidents as incidents_repo
+from app.repositories import notes as notes_repo
 from app.schemas.auth import CurrentUser
 from app.schemas.common import IncidentStatus, UserRole
 from app.schemas.incidents import (
@@ -235,10 +236,20 @@ def assign(
             engineer["max_active_tickets"],
         )
 
-    previous = incident["assignee_id"]
-    # Assignment and its audit event commit together. Note the event records
-    # the previous assignee by id but the new one by name.
+    # Assignment, its audit event, clearing requests and (optionally) starting
+    # work all commit together. The event records the previous assignee by id
+    # but the new one by name.
     with transaction(conn):
+        # Lock the incident (a job request or status change waits) and the
+        # engineer's profile (a deactivation waits), then re-check both.
+        incident = incidents_repo.lock(conn, incident_id)
+        if incident["status"] == IncidentStatus.CLOSED:
+            raise ValidationError("A closed incident cannot be reassigned.")
+        engineers_repo.lock(conn, payload.engineer_id)
+        engineer = engineers_repo.get(conn, payload.engineer_id)
+        if not engineer["is_active"]:
+            raise ValidationError("That engineer's account is deactivated.")
+        previous = incident["assignee_id"]
         incidents_repo.set_assignee(conn, incident_id, payload.engineer_id)
         # Assigning answers every pending request for this job, whether or not
         # it went to the engineer who asked.
@@ -251,6 +262,20 @@ def assign(
             from_value=str(previous) if previous else None,
             to_value=engineer["full_name"],
         )
+        # "Assign and start": only an open incident moves; any other status is
+        # left as it is rather than refused.
+        if payload.start_work and incident["status"] == IncidentStatus.OPEN:
+            incidents_repo.set_status(
+                conn, incident_id, status=IncidentStatus.IN_PROGRESS.value, blocked_reason=None
+            )
+            events_repo.record(
+                conn,
+                incident_id=incident_id,
+                actor_id=user.id,
+                event_type="status_changed",
+                from_value=IncidentStatus.OPEN.value,
+                to_value=IncidentStatus.IN_PROGRESS.value,
+            )
     return get_incident(conn, incident_id, user)
 
 
@@ -266,47 +291,99 @@ def change_status(
     is reported as such (400) whoever asks; a possible move the caller may not
     make is a 403.
     """
-    incident = _load_visible(conn, incident_id, user)
-    current = IncidentStatus(incident["status"])
+    _load_visible(conn, incident_id, user)
     target = payload.status
 
+    with transaction(conn):
+        # Re-read under a row lock: the status the checks below rely on
+        # cannot change until this transaction commits.
+        incident = incidents_repo.lock(conn, incident_id)
+        current = IncidentStatus(incident["status"])
+        steps = _status_path(current, target)
+
+        # Every step must be one this caller may make, and work cannot start
+        # with nobody assigned to do it.
+        at = current
+        for step in steps:
+            _check_status_permission(user, incident, at, step)
+            if step == IncidentStatus.IN_PROGRESS and incident["assignee_id"] is None:
+                raise ValidationError("Assign an engineer before starting work.")
+            at = step
+
+        if payload.note and target == IncidentStatus.CLOSED:
+            raise ValidationError("Add the note before closing: a closed incident takes no notes.")
+
+        # One audit event per step, so the timeline shows the intermediate
+        # in_progress too. The reason belongs to the final step only; the
+        # repository keeps it as blocked_reason only when that is blocked.
+        at = current
+        for step in steps:
+            reason = payload.reason if step == target else None
+            incidents_repo.set_status(
+                conn, incident_id, status=step.value, blocked_reason=reason
+            )
+            events_repo.record(
+                conn,
+                incident_id=incident_id,
+                actor_id=user.id,
+                event_type="status_changed",
+                from_value=at.value,
+                to_value=step.value,
+                reason=reason,
+            )
+            at = step
+
+        if payload.note:
+            notes_repo.create(
+                conn, incident_id=incident_id, author_id=user.id, body=payload.note
+            )
+            events_repo.record(
+                conn, incident_id=incident_id, actor_id=user.id, event_type="note_added"
+            )
+    logger.info(
+        "incident %s %s -> %s by %s",
+        incident_id,
+        current.value,
+        " -> ".join(s.value for s in steps),
+        user.id,
+    )
+    return get_incident(conn, incident_id, user)
+
+
+# Moves a caller may ask for in one call; the server passes through in_progress.
+_VIA_IN_PROGRESS = {
+    (IncidentStatus.OPEN, IncidentStatus.BLOCKED),
+    (IncidentStatus.OPEN, IncidentStatus.RESOLVED),
+    (IncidentStatus.BLOCKED, IncidentStatus.RESOLVED),
+}
+
+
+def _status_path(
+    current: IncidentStatus, target: IncidentStatus
+) -> list[IncidentStatus]:
+    """The workflow steps from `current` to `target`.
+
+    A direct move when the workflow allows one. Otherwise one of the forward
+    moves in `_VIA_IN_PROGRESS` (open -> blocked, open -> resolved,
+    blocked -> resolved) goes through in_progress first, so a caller can ask
+    for the outcome and the server performs both steps atomically. Anything
+    else is a ValidationError (400).
+    """
     # Not in the transition table either, but worth a clearer message.
     if target == current:
         raise ValidationError(f"This incident is already {current.value}.")
-
     allowed = ALLOWED_TRANSITIONS[current]
-    if target not in allowed:
-        permitted = ", ".join(sorted(s.value for s in allowed)) or "nothing"
-        raise ValidationError(
-            f"An incident that is {current.value} cannot move to {target.value}. "
-            f"Allowed from here: {permitted}."
-        )
-
-    _check_status_permission(user, incident, current, target)
-
-    # Work cannot start with nobody assigned to do it.
-    if target == IncidentStatus.IN_PROGRESS and incident["assignee_id"] is None:
-        raise ValidationError("Assign an engineer before starting work.")
-
-    # The repository keeps `reason` as blocked_reason only when the target
-    # is blocked; it is always recorded on the audit event.
-    with transaction(conn):
-        incidents_repo.set_status(
-            conn, incident_id, status=target.value, blocked_reason=payload.reason
-        )
-        events_repo.record(
-            conn,
-            incident_id=incident_id,
-            actor_id=user.id,
-            event_type="status_changed",
-            from_value=current.value,
-            to_value=target.value,
-            reason=payload.reason,
-        )
-    logger.info(
-        "incident %s %s -> %s by %s", incident_id, current.value, target.value, user.id
+    if target in allowed:
+        return [target]
+    # Only forward moves are shortened. Anything leaving resolved (a reopen)
+    # must be asked for explicitly, never implied by a later step.
+    if (current, target) in _VIA_IN_PROGRESS:
+        return [IncidentStatus.IN_PROGRESS, target]
+    permitted = ", ".join(sorted(s.value for s in allowed)) or "nothing"
+    raise ValidationError(
+        f"An incident that is {current.value} cannot move to {target.value}. "
+        f"Allowed from here: {permitted}."
     )
-    return get_incident(conn, incident_id, user)
 
 
 def _check_status_permission(

@@ -436,3 +436,15 @@ def find_similar(
             },
         )
         return [_shape_summary(row) for row in cur.fetchall()]
+
+
+def lock(conn: Connection, incident_id: int) -> dict | None:
+    """Read the incident's row and lock it until the transaction ends.
+
+    Must run inside `transaction(conn)`. Anything else that locks the same row
+    (assigning, changing status, requesting the job) waits, so a check made on
+    the locked row still holds when the write that depends on it commits.
+    """
+    return conn.execute(
+        "SELECT * FROM incidents WHERE id = %(id)s FOR UPDATE", {"id": incident_id}
+    ).fetchone()

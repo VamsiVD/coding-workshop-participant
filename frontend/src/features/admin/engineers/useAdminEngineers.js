@@ -1,6 +1,7 @@
 // Data hook for the engineers page: loads engineer profiles and the
-// specialisation categories, and exposes create, edit, availability and
-// deactivate actions that keep the local list in step with the server.
+// specialisation categories, and exposes create, edit, availability,
+// deactivate and promote-an-employee actions that keep the local list in
+// step with the server.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { adminApi } from '../../../services/adminApi';
 
@@ -74,5 +75,23 @@ export default function useAdminEngineers() {
     return next;
   }, [merge]);
 
-  return { engineers, categories, loadError, reload, create, update, setAvailable, deactivate };
+  // Reactivation is an account change (PATCH /users/:id); the list is reloaded
+  // so the engineer comes back with their current workload.
+  const reactivate = useCallback(async (id) => {
+    await adminApi.updateUser(id, { isActive: true });
+    await reload();
+  }, [reload]);
+
+  // Active employees for the "Promote existing user" search (q under 2 characters lists them all).
+  const findEmployees = useCallback((q) => adminApi.listUsers({ q, role: 'employee', includeInactive: false }), []);
+
+  // An existing employee becomes an engineer with the given profile settings. The new profile
+  // (and its workload) only exists server-side, so the whole list is reloaded.
+  const promote = useCallback(async (person, profile) => {
+    const next = await adminApi.updateUser(person.id, { role: 'engineer', engineer: profile });
+    await reload();
+    return next;
+  }, [reload]);
+
+  return { engineers, categories, loadError, reload, create, update, setAvailable, deactivate, reactivate, findEmployees, promote };
 }

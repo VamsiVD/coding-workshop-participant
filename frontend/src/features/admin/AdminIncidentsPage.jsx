@@ -5,8 +5,9 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, Box, CircularProgress, MenuItem, Snackbar, Tab, Tabs, TextField, Typography } from '@mui/material';
 import { admin } from '../../theme/adminTheme';
-import { isActive, needsAction } from './adminModel';
+import { DEFAULT_RANGE, isActive, needsAction } from './adminModel';
 import useAdminIncidents from './useAdminIncidents';
+import useInsights from './useInsights';
 import QueueTab from './components/QueueTab';
 import InsightsTab from './components/InsightsTab';
 import IncidentDrawer from './components/IncidentDrawer';
@@ -17,10 +18,16 @@ const ALL = 'All buildings';
 // [CONCEPT: Component] The page component; the data work lives in a hook, the markup in child tabs.
 export default function AdminIncidentsPage() {
   // [CONCEPT: Custom hook] useAdminIncidents owns the fetched data and every server action; the page just wires them up.
-  const { data, error, clearError, notice, clearNotice, load, assign, setStatus, decide, addNote, approveRequest, declineRequest } = useAdminIncidents();
+  const {
+    data, error, clearError, notice, clearNotice, load, assign, setStatus, decide, addNote, editNote, deleteNote,
+    categories, loadCategories, updateIncident, deleteIncident, approveRequest, declineRequest,
+  } = useAdminIncidents();
   // [CONCEPT: useState] Purely UI state: which tab, which building filter, which incident's drawer is open.
   const [tab, setTab] = useState('queue');
   const [building, setBuilding] = useState(ALL);
+  // Insights date range; kept here rather than in the tab so it survives switching tabs.
+  const [range, setRange] = useState(DEFAULT_RANGE);
+  const ranged = useInsights(range, tab === 'insights');
   // Only the ref is stored, not the incident object, so the drawer always shows
   // the latest copy from `data` after an update.
   const [openRef, setOpenRef] = useState(null);
@@ -31,6 +38,12 @@ export default function AdminIncidentsPage() {
     () => (data ? data.incidents.filter((i) => building === ALL || i.building === building) : []),
     [data, building],
   );
+  // The Insights list for the chosen date range: the server's answer, building-filtered
+  // the same way. null while a range's first answer is loading; "All time" reuses `incidents`.
+  const rangedIncidents = useMemo(() => {
+    if (!ranged.bounds) return incidents;
+    return ranged.data ? ranged.data.incidents.filter((i) => building === ALL || i.building === building) : null;
+  }, [ranged.bounds, ranged.data, incidents, building]);
   // Pending job requests grouped by incident ref, for the queue badges and the drawer.
   const requestsByRef = useMemo(() => {
     const m = {};
@@ -50,6 +63,13 @@ export default function AdminIncidentsPage() {
   const openIncident = (ref) => {
     setOpenRef(ref);
     load(ref);
+  };
+
+  // After a confirmed delete the incident is gone from `data`; close the drawer too.
+  const removeIncident = async (ref) => {
+    const ok = await deleteIncident(ref);
+    if (ok) setOpenRef(null);
+    return ok;
   };
 
   // [CONCEPT: Loading and error state] Until the overview arrives, show a spinner, or the error if the first load failed.
@@ -91,7 +111,19 @@ export default function AdminIncidentsPage() {
       {/* [CONCEPT: Props] Children get data plus callbacks (onOpen) to report back up to this page. */}
       {tab === 'queue'
         ? <QueueTab incidents={incidents} engineerName={engineerName} requestsByRef={requestsByRef} onOpen={openIncident} />
-        : <InsightsTab incidents={incidents} engineers={data.engineers} kpis={data.kpis} />}
+        : (
+          <InsightsTab
+            incidents={rangedIncidents}
+            current={incidents}
+            engineers={data.engineers}
+            kpis={ranged.bounds ? ranged.data?.kpis : data.kpis}
+            range={range}
+            onRangeChange={setRange}
+            rangeInvalid={Boolean(ranged.bounds?.invalid)}
+            loading={ranged.loading}
+            error={ranged.error}
+          />
+        )}
 
       {/* [CONCEPT: Lifting state up] The drawer owns no incident data; it reads it from this page and calls the hook's actions.
           The drawer is always mounted; it is open when `incident` is found (openRef is set). */}
@@ -104,6 +136,12 @@ export default function AdminIncidentsPage() {
         onStatus={setStatus}
         onDecide={decide}
         onNote={addNote}
+        onEditNote={editNote}
+        onDeleteNote={deleteNote}
+        categories={categories}
+        onNeedCategories={loadCategories}
+        onUpdate={updateIncident}
+        onDelete={removeIncident}
         onApproveRequest={approveRequest}
         onDeclineRequest={declineRequest}
       />
@@ -112,7 +150,7 @@ export default function AdminIncidentsPage() {
       <Snackbar open={!!error} autoHideDuration={5000} onClose={clearError}>
         <Alert severity="error" onClose={clearError}>{error}</Alert>
       </Snackbar>
-      {/* Confirms a job request was assigned or declined; placed top so it never covers the error toast. */}
+      {/* Confirms a job request was assigned or declined, or an incident edited or deleted; placed top so it never covers the error toast. */}
       <Snackbar open={!!notice} autoHideDuration={4000} onClose={clearNotice} anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
         <Alert severity="success" onClose={clearNotice}>{notice}</Alert>
       </Snackbar>

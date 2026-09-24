@@ -12,6 +12,8 @@ export default function useAdminIncidents() {
   const [error, setError] = useState('');
   // Success message for the job-request actions, shown as a toast by the page.
   const [notice, setNotice] = useState('');
+  // Categories for the drawer's edit form: null until first asked for, then [{ id, label, type }].
+  const [categories, setCategories] = useState(null);
   // Latest state for the optimistic rollback, without relying on the updater
   // running synchronously.
   // [CONCEPT: useRef] A mutable box that survives re-renders without causing one; refreshed on every render to mirror `data`.
@@ -95,6 +97,47 @@ export default function useAdminIncidents() {
     // an approval can raise it by one level.
     decide: (ref, decision) => run(ref, {}, () => adminApi.decideEscalation(ref, decision, find(ref)?.priority)),
     addNote: (ref, text) => run(ref, {}, () => adminApi.addNote(ref, text)),
+    // [CONCEPT: Optimistic update] The edited text shows (or the note disappears) at once; a failure restores it.
+    editNote: (ref, noteId, text) => run(
+      ref,
+      { notes: (find(ref)?.notes ?? []).map((n) => (n.id === noteId ? { ...n, text } : n)) },
+      () => adminApi.editNote(ref, noteId, text),
+    ),
+    deleteNote: (ref, noteId) => run(
+      ref,
+      { notes: (find(ref)?.notes ?? []).filter((n) => n.id !== noteId) },
+      () => adminApi.deleteNote(ref, noteId),
+    ),
+    // Loads the category list once, the first time the edit form opens.
+    categories,
+    loadCategories: () => {
+      if (categories) return;
+      adminApi.listCategories().then(setCategories).catch((e) => setError(e.message));
+    },
+    // changes: any of { title, description, categoryId }. The new title and text show straight away;
+    // the category label follows from the server's copy.
+    updateIncident: async (ref, changes) => {
+      const optimistic = {};
+      if (changes.title !== undefined) optimistic.title = changes.title;
+      if (changes.description !== undefined) optimistic.description = changes.description;
+      const ok = await run(ref, optimistic, () => adminApi.updateIncident(ref, changes));
+      if (ok) setNotice(`${ref} updated`);
+      return ok;
+    },
+    // Not optimistic: deleting is permanent, so the row goes only once the server confirms.
+    // Resolves true when the incident (and its pending job requests) left the list.
+    deleteIncident: async (ref) => {
+      try {
+        await adminApi.deleteIncident(ref);
+        // [CONCEPT: Immutable update] New arrays without the deleted incident and its requests.
+        setData((d) => ({ ...d, incidents: d.incidents.filter((i) => i.ref !== ref), requests: d.requests.filter((r) => r.ref !== ref) }));
+        setNotice(`${ref} deleted`);
+        return true;
+      } catch (e) {
+        setError(e.message);
+        return false;
+      }
+    },
     // Confirming a job request is an ordinary assignment to the requester; the
     // incident's requests are hidden straight away, since the server drops them all.
     approveRequest: async (req) => {

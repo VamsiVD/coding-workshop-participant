@@ -93,8 +93,15 @@ if [ "$PG_OK" = false ]; then
         PG_HBA=$(find /etc/postgresql -name "pg_hba.conf" 2>/dev/null | head -1)
         [ -n "$PG_CONF" ] && sudo sed -i "s/#\?listen_addresses\s*=\s*'[^']*'/listen_addresses = '*'/" "$PG_CONF"
         # Allow all hosts to connect (local dev only)
-        if [ -n "$PG_HBA" ] && ! sudo grep -q "0.0.0.0/0" "$PG_HBA"; then
-            echo "host all all 0.0.0.0/0 trust" | sudo tee -a "$PG_HBA" > /dev/null
+        # Allow only Docker's private networks (172.16.0.0/12 covers the default
+        # bridge and LocalStack's networks), where the Lambda containers run.
+        # An earlier version trusted 0.0.0.0/0, which let anyone on the network
+        # in without a password; that line is removed if present.
+        if [ -n "$PG_HBA" ]; then
+            sudo sed -i '/^host all all 0\.0\.0\.0\/0 trust$/d' "$PG_HBA"
+            if ! sudo grep -q "172.16.0.0/12" "$PG_HBA"; then
+                echo "host all all 172.16.0.0/12 trust" | sudo tee -a "$PG_HBA" > /dev/null
+            fi
         fi
         sudo systemctl restart "$PG_SERVICE" || { echo -e "  ✗ Failed to restart PostgreSQL"; exit 1; }
     fi

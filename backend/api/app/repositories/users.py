@@ -107,3 +107,62 @@ def set_active(conn: Connection, user_id: int, is_active: bool) -> dict | None:
             {"id": user_id, "active": is_active},
         )
         return cur.fetchone()
+
+
+def list_for_admin(
+    conn: Connection, *, q: str | None, role: str | None, include_inactive: bool
+) -> list[dict]:
+    """Everyone, for the admin's people list, ordered by name.
+
+    Optional filters use the NULL-disables-the-condition pattern, so the SQL
+    text is fixed. `q` matches name or email; its wildcards are added to the
+    bound value, not the SQL.
+    """
+    return conn.execute(
+        f"""
+        SELECT {PUBLIC} FROM users
+        WHERE (%(q)s::text IS NULL OR full_name ILIKE %(q)s OR email ILIKE %(q)s)
+          AND (%(role)s::text IS NULL OR role = %(role)s::user_role)
+          AND (%(include_inactive)s OR is_active)
+        ORDER BY full_name, id
+        """,
+        {"q": f"%{q}%" if q else None, "role": role, "include_inactive": include_inactive},
+    ).fetchall()
+
+
+def lock(conn: Connection, user_id: int) -> dict | None:
+    """Read and lock the user's row until the transaction ends."""
+    return conn.execute(
+        f"SELECT {PUBLIC} FROM users WHERE id = %(id)s FOR UPDATE", {"id": user_id}
+    ).fetchone()
+
+
+def update_account(conn: Connection, user_id: int, changes: dict) -> dict | None:
+    """Change name, role or active flag. Column names come from the allowlist
+    below, never from the request; values are always bound."""
+    allowed = {"full_name", "role", "is_active"}
+    fields = {k: v for k, v in changes.items() if k in allowed}
+    if not fields:
+        return get_by_id(conn, user_id)
+    assignments = ", ".join(
+        f"{name} = %({name})s::user_role" if name == "role" else f"{name} = %({name})s"
+        for name in fields
+    )
+    return conn.execute(
+        f"UPDATE users SET {assignments} WHERE id = %(id)s RETURNING {PUBLIC}",
+        {**fields, "id": user_id},
+    ).fetchone()
+
+
+def count_other_active_admins(conn: Connection, user_id: int) -> int:
+    """Active administrators other than this user. Locks them, so two admins
+    cannot demote each other at the same moment and leave none."""
+    rows = conn.execute(
+        """
+        SELECT id FROM users
+        WHERE role = 'admin' AND is_active AND id <> %(id)s
+        FOR UPDATE
+        """,
+        {"id": user_id},
+    ).fetchall()
+    return len(rows)

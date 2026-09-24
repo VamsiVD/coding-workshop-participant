@@ -16,7 +16,9 @@ _SELECT = """
            c.id AS specialization_id, c.label AS specialization_label,
            c.category_type AS specialization_type
     FROM engineer_profiles ep
-    JOIN users u ON u.id = ep.user_id
+    -- A profile outlives a demotion (incidents still point at it), so the
+    -- role decides who counts as an engineer now.
+    JOIN users u ON u.id = ep.user_id AND u.role = 'engineer'
     LEFT JOIN categories c ON c.id = ep.specialization_id
 """
 
@@ -175,10 +177,24 @@ def workload(conn: Connection) -> list[dict]:
             JOIN users u ON u.id = ep.user_id
             LEFT JOIN categories c ON c.id = ep.specialization_id
             LEFT JOIN incidents i ON i.assignee_id = ep.user_id
-            WHERE u.is_active
+            WHERE u.is_active AND u.role = 'engineer'
             GROUP BY ep.user_id, u.full_name, ep.is_available,
                      ep.max_active_tickets, c.label
             ORDER BY u.full_name
             """
         )
         return cur.fetchall()
+
+
+def lock(conn: Connection, user_id: int) -> bool:
+    """Lock the engineer's profile row until the transaction ends.
+
+    Assigning and deactivating both take this lock, so an engineer cannot be
+    deactivated while a ticket is being assigned to them. False if there is
+    no profile.
+    """
+    row = conn.execute(
+        "SELECT user_id FROM engineer_profiles WHERE user_id = %(id)s FOR UPDATE",
+        {"id": user_id},
+    ).fetchone()
+    return row is not None

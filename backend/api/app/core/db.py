@@ -35,7 +35,10 @@ def get_pool() -> ConnectionPool:
             # pool would only hold idle connections open against the database.
             max_size=4,
             # Seconds a request waits for a free connection before failing.
-            timeout=10,
+            # Aurora Serverless can take ~15 s to resume from 0 ACU; waiting 30 s
+            # (and allowing 20 s per connection attempt) keeps the first request
+            # after an idle spell from failing.
+            timeout=30,
             open=True,
             # Autocommit, with explicit transactions in the service layer.
             #
@@ -45,7 +48,7 @@ def get_pool() -> ConnectionPool:
             # fast client can then read its own write and get a 404. Committing
             # inside the endpoint, through `conn.transaction()`, closes that
             # window.
-            kwargs={"row_factory": dict_row, "autocommit": True},
+            kwargs={"row_factory": dict_row, "autocommit": True, "connect_timeout": 20},
         )
         logger.info("database pool created")
     return _pool

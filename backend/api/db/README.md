@@ -73,6 +73,10 @@ DBML cannot express these, so they live only in `init/01_schema.sql`:
   `escalation_reason` required when an escalation exists, a seat cannot be given
   without its floor, and an incident cannot be its own duplicate.
 - **Trigram indexes** on `title` and `description` for the search requirement.
+- **A BRIN index** on `incidents.created_at` (`07_incidents_created_at_brin.sql`)
+  for date-range filters. Rows arrive in `created_at` order, so a tiny
+  min/max-per-block index lets range scans skip old blocks; the B-tree on the
+  same column stays for `ORDER BY created_at DESC` pagination.
 - **`updated_at`** maintained by trigger, not by application code.
 
 ## Seed accounts
@@ -101,7 +105,11 @@ pagination, filters, search and the dashboards, load `seed_dummy.sql` on top:
 
 ```bash
 docker compose exec -T postgres psql -U acme -d acme_incidents -q < backend/api/db/seed_dummy.sql
+# Give the new people desks too (init already ran this once, before they existed):
+docker compose exec -T postgres psql -U acme -d acme_incidents -q < backend/api/db/init/06_demo_workplaces.sql
 ```
+
+On AWS, `migrate` with `"dummy": true` does both in one invocation.
 
 It adds 18 employees, 4 engineers and 220 incidents spread over the last 120
 days, with notes, a full audit trail and a few closed-as-duplicate links.

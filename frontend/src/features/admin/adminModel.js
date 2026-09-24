@@ -93,20 +93,52 @@ const tally = (list, key) => {
 
 const DAY = 24 * 3600e3;
 
-// Everything the Insights tab charts, derived from the (building-filtered)
-// incident list. `load` counts only In Progress and Blocked work per engineer.
-export function insights(incidents, engineers) {
+// Everything the Insights tab charts, derived from the (building- and
+// date-filtered) incident list. `load` counts only In Progress and Blocked work
+// per engineer, taken from `current` (every incident, whenever reported), since
+// workload is about today rather than the chosen date range.
+export function insights(incidents, engineers, current = incidents) {
   const hotspots = tally(incidents, (i) => [shortBuilding(i.building), i.floor].filter(Boolean).join(', ')).slice(0, 4);
   const repeatSeats = tally(incidents, (i) => (i.seat ? `${shortBuilding(i.building)} seat ${i.seat}` : null)).filter((e) => e[1] > 1);
   const categories = tally(incidents, (i) => i.category).slice(0, 5);
   const byStatus = STATUSES.map((s) => ({ status: s, count: incidents.filter((i) => i.status === s).length }));
   const workload = engineers.map((e) => ({
     ...e,
-    load: incidents.filter((i) => i.assigneeId === e.id && (i.status === 'In Progress' || i.status === 'Blocked')).length,
+    load: current.filter((i) => i.assigneeId === e.id && (i.status === 'In Progress' || i.status === 'Blocked')).length,
   }));
   // Share of open work touched in the last day: the "kept informed" signal.
   const active = incidents.filter(isActive);
   const fresh = active.filter((i) => Date.now() - new Date(i.updatedAt).getTime() < DAY).length;
   const updatedWithin24hPct = active.length ? Math.round((fresh / active.length) * 100) : null;
   return { hotspots, repeatSeats, categories, byStatus, workload, updatedWithin24hPct };
+}
+
+// Date-range choices for the Insights tab. `days` counts today, so "Last 7
+// days" is today and the six before it.
+export const RANGES = [
+  { key: 'all', label: 'All time' },
+  { key: '7d', label: 'Last 7 days', days: 7 },
+  { key: '30d', label: 'Last 30 days', days: 30 },
+  { key: '90d', label: 'Last 90 days', days: 90 },
+  { key: 'custom', label: 'Custom range' },
+];
+export const DEFAULT_RANGE = { key: 'all', from: '', to: '' };
+
+// Turns the picker state ({ key, from: 'YYYY-MM-DD', to }) into Dates in the
+// admin's own timezone, whole days inclusive. Returns null for "All time" (no
+// filter) and { invalid: true } for a custom range that ends before it starts.
+export function rangeBounds({ key, from, to }) {
+  if (key === 'all') return null;
+  const preset = RANGES.find((r) => r.key === key);
+  if (preset?.days) {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - (preset.days - 1));
+    return { from: start, to: null };
+  }
+  // Appending a time without a zone makes Date parse it as local time.
+  const start = from ? new Date(`${from}T00:00:00`) : null;
+  const end = to ? new Date(`${to}T23:59:59.999`) : null;
+  if (start && end && start > end) return { invalid: true };
+  return start || end ? { from: start, to: end } : null;
 }

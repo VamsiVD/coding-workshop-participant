@@ -94,6 +94,10 @@ class IncidentAssign(ApiModel):
     """Administrator assigns, or reassigns, an engineer."""
 
     engineer_id: int = Field(description="The engineer's user id.")
+    start_work: bool = Field(
+        default=False,
+        description="Also move an open incident to in_progress, in the same transaction.",
+    )
 
 
 class IncidentStatusChange(ApiModel):
@@ -103,10 +107,15 @@ class IncidentStatusChange(ApiModel):
     `ALLOWED_TRANSITIONS`, since it depends on the incident's current status,
     which this model does not know. `reason` is recorded on the timeline and,
     for `blocked`, stored as the incident's blocked reason.
+
+    `note`, when given, is added to the incident's notes in the same
+    transaction, so the reporter reads it (e.g. what was fixed) and the status
+    never changes without it.
     """
 
     status: IncidentStatus
     reason: str | None = Field(default=None, max_length=2000)
+    note: str | None = Field(default=None, min_length=1, max_length=5000)
 
     @model_validator(mode="after")
     def blocked_needs_reason(self) -> "IncidentStatusChange":

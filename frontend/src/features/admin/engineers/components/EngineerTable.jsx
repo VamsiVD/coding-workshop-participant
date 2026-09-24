@@ -4,6 +4,7 @@
 import { Box, Chip, IconButton, Switch, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tooltip } from '@mui/material';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import PersonOffOutlinedIcon from '@mui/icons-material/PersonOffOutlined';
+import HowToRegOutlinedIcon from '@mui/icons-material/HowToRegOutlined';
 import { admin } from '../../../../theme/adminTheme';
 import { Dot } from '../../components/Panel';
 import { availabilityOf, isFull } from '../engineersModel';
@@ -23,7 +24,7 @@ function Load({ e }) {
 }
 
 // [CONCEPT: Props] `pending` is the id whose availability is being saved, so only that switch is disabled.
-export default function EngineerTable({ engineers, pending, onEdit, onToggle, onDeactivate }) {
+export default function EngineerTable({ engineers, pending, onEdit, onToggle, onDeactivate, onReactivate }) {
   return (
     <TableContainer>
       <Table size="small" sx={{ '& td': { py: 1.25 } }}>
@@ -44,7 +45,8 @@ export default function EngineerTable({ engineers, pending, onEdit, onToggle, on
           {engineers.map((e) => {
             const av = availabilityOf(e);
             return (
-              <TableRow key={e.id} sx={{ opacity: e.isActive ? 1 : 0.55, bgcolor: e.isActive ? 'transparent' : admin.track }}>
+              // Inactive rows are faded except the actions cell, so Reactivate still reads as clickable.
+              <TableRow key={e.id} sx={{ bgcolor: e.isActive ? 'transparent' : admin.track, '& td:not(:last-of-type)': { opacity: e.isActive ? 1 : 0.55 } }}>
                 <TableCell sx={{ pl: 2 }}>
                   <Box sx={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                     {e.name}
@@ -83,6 +85,10 @@ export default function EngineerTable({ engineers, pending, onEdit, onToggle, on
                       <Tooltip title="Edit profile"><IconButton size="small" aria-label={`Edit ${e.name}`} onClick={() => onEdit(e)}><EditOutlinedIcon fontSize="small" /></IconButton></Tooltip>
                       <Tooltip title="Deactivate"><IconButton size="small" aria-label={`Deactivate ${e.name}`} onClick={() => onDeactivate(e)} sx={{ color: admin.dangerFg }}><PersonOffOutlinedIcon fontSize="small" /></IconButton></Tooltip>
                     </>
+                  )}
+                  {/* [CONCEPT: Conditional rendering] An inactive engineer offers only Reactivate. */}
+                  {!e.isActive && (
+                    <Tooltip title="Reactivate"><IconButton size="small" aria-label={`Reactivate ${e.name}`} onClick={() => onReactivate(e)} sx={{ color: admin.brown }}><HowToRegOutlinedIcon fontSize="small" /></IconButton></Tooltip>
                   )}
                 </TableCell>
               </TableRow>

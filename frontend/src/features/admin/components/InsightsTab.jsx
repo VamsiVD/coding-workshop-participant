@@ -1,20 +1,55 @@
-// Insights tab of the admin console: KPI tiles, a status breakdown bar, and
-// panels for hotspots, top categories and engineer workload. Read-only; all
-// numbers come from the building-filtered incidents plus the server KPIs.
-import { Box } from '@mui/material';
+// Insights tab of the admin console: a date-range filter, KPI tiles, a status
+// breakdown bar, and panels for hotspots, top categories and engineer workload.
+// Read-only; all numbers come from the building- and date-filtered incidents
+// plus the server KPIs for the same dates.
+import { Alert, Box, CircularProgress, MenuItem, TextField } from '@mui/material';
 import { admin } from '../../../theme/adminTheme';
-import { CAPACITY, STATUS_BAR, insights } from '../adminModel';
+import { CAPACITY, RANGES, STATUS_BAR, insights } from '../adminModel';
 import Panel, { BarRow, Dot } from './Panel';
+
+// Preset picker, plus From/To dates when "Custom range" is chosen.
+// [CONCEPT: Controlled input] Every field reads from `range` and reports changes up through onChange.
+function RangeFilter({ range, onChange, invalid, loading }) {
+  const set = (patch) => onChange({ ...range, ...patch });
+  const dateProps = { size: 'small', type: 'date', slotProps: { inputLabel: { shrink: true } }, sx: { width: 170 } };
+  return (
+    <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+      <TextField select size="small" label="Reported" value={range.key} onChange={(e) => set({ key: e.target.value })} sx={{ minWidth: 180 }}>
+        {RANGES.map((r) => <MenuItem key={r.key} value={r.key}>{r.label}</MenuItem>)}
+      </TextField>
+      {range.key === 'custom' && (
+        <>
+          <TextField {...dateProps} label="From" value={range.from} onChange={(e) => set({ from: e.target.value })} error={invalid} />
+          <TextField {...dateProps} label="To" value={range.to} onChange={(e) => set({ to: e.target.value })} error={invalid} helperText={invalid ? 'Ends before it starts' : undefined} />
+        </>
+      )}
+      {loading && <CircularProgress size={18} color="secondary" />}
+    </Box>
+  );
+}
 
 // Reports come back null until an incident has reached that stage.
 const fmt = (v, unit) => (v == null ? '—' : `${v}${unit}`);
 const versus = (v, target, targetLabel) => (v == null ? 'Nothing measured yet' : `Target ${targetLabel} · ${v <= target ? 'on track' : 'over target'}`);
 const tone = (v, target) => (v == null ? admin.muted : v <= target ? admin.brown : admin.dangerFg);
 
-export default function InsightsTab({ incidents, engineers, kpis }) {
+// `incidents` is null while the first answer for a date range loads. `current`
+// is the building-filtered list regardless of dates, for the workload panel.
+export default function InsightsTab({ incidents, current, engineers, kpis, range, onRangeChange, rangeInvalid, loading, error }) {
+  const filter = <RangeFilter range={range} onChange={onRangeChange} invalid={rangeInvalid} loading={loading} />;
+  // [CONCEPT: Early return] Nothing to chart yet: show just the filter and why.
+  if (rangeInvalid || !incidents) {
+    return (
+      <Box sx={{ display: 'grid', gap: 3 }}>
+        {filter}
+        {error ? <Alert severity="error">{error}</Alert> : !rangeInvalid && <Box sx={{ fontSize: 13, color: admin.muted }}>Loading insights…</Box>}
+      </Box>
+    );
+  }
+
   // [CONCEPT: Derived state] All chart data is recomputed from props on each render by a pure helper; nothing is stored.
-  const { hotspots, repeatSeats, categories, byStatus, workload, updatedWithin24hPct } = insights(incidents, engineers);
-  // Time KPIs come from the server for all incidents, so they do not follow the building filter.
+  const { hotspots, repeatSeats, categories, byStatus, workload, updatedWithin24hPct } = insights(incidents, engineers, current);
+  // Time KPIs come from the server for the chosen dates across all buildings, so they do not follow the building filter.
   const k = kpis || {};
   // Tile config as data, rendered by one map below. The targets are minutes and days; the ack target is shown in hours.
   const tiles = [
@@ -30,6 +65,8 @@ export default function InsightsTab({ incidents, engineers, kpis }) {
 
   return (
     <Box sx={{ display: 'grid', gap: 3 }}>
+      {filter}
+      {error && <Alert severity="error">{error}</Alert>}
       {/* [CONCEPT: Responsive design] auto-fit + minmax lets the tiles wrap into fewer columns on narrow screens, with no breakpoints. */}
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', border: `1px solid ${admin.line}`, borderRadius: '12px', overflow: 'hidden' }}>
         {/* [CONCEPT: List rendering and keys] Labels are unique, so they key the tiles. */}

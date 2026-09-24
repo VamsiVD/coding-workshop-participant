@@ -9,6 +9,8 @@ resolves the caller's scope and passes it to the SQL, adding only light
 shaping of the rows.
 """
 
+from datetime import datetime
+
 from psycopg import Connection
 
 from app.repositories import engineers as engineers_repo
@@ -47,11 +49,22 @@ def hotspots(
     return {"group_by": group_by, "rows": rows}
 
 
-def response_times(conn: Connection, user: CurrentUser) -> dict:
-    """Q3. Hours to acknowledge, assign and resolve, overall and by priority."""
+def response_times(
+    conn: Connection,
+    user: CurrentUser,
+    *,
+    created_from: datetime | None = None,
+    created_to: datetime | None = None,
+) -> dict:
+    """Q3. Hours to acknowledge, assign and resolve, overall and by priority,
+    optionally for incidents reported within a date range."""
     scope_clause, scope_params = scoping.incident_scope(user)
     return repo.response_times(
-        conn, scope_clause=scope_clause, scope_params=scope_params
+        conn,
+        scope_clause=scope_clause,
+        scope_params=scope_params,
+        created_from=created_from,
+        created_to=created_to,
     )
 
 

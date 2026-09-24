@@ -109,6 +109,8 @@ export default function EngineerWorkbenchPage() {
         onWithdraw={async (ref) => { await w.withdrawRequest(ref); setToast(`Request for ${ref} withdrawn.`); }}
         onStatus={onStatus}
         onAddNote={w.addNote}
+        onEditNote={async (ref, noteId, text) => { const ok = await w.editNote(ref, noteId, text); if (ok) setToast('Note updated.'); return ok; }}
+        onDeleteNote={async (ref, noteId) => { const ok = await w.deleteNote(ref, noteId); if (ok) setToast('Note deleted.'); return ok; }}
       />
 
       <Snackbar slotProps={{ content: { sx: { bgcolor: admin.ink, color: admin.surface, borderRadius: '10px' } } }}

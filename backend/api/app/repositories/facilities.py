@@ -105,7 +105,8 @@ def building_usage(conn: Connection, building_id: int) -> dict:
         cur.execute(
             """
             SELECT (SELECT count(*) FROM floors WHERE building_id = %(id)s) AS floors,
-                   (SELECT count(*) FROM incidents WHERE building_id = %(id)s) AS incidents
+                   (SELECT count(*) FROM incidents WHERE building_id = %(id)s) AS incidents,
+                   (SELECT count(*) FROM users WHERE building_id = %(id)s) AS users
             """,
             {"id": building_id},
         )
@@ -158,13 +159,14 @@ def delete_floor(conn: Connection, floor_id: int) -> bool:
 
 
 def floor_usage(conn: Connection, floor_id: int) -> dict:
-    """Seats and incidents on this floor, checked before a delete as for
-    buildings."""
+    """Seats, incidents and users (their workplace) on this floor, checked
+    before a delete as for buildings."""
     with conn.cursor() as cur:
         cur.execute(
             """
             SELECT (SELECT count(*) FROM seats WHERE floor_id = %(id)s) AS seats,
-                   (SELECT count(*) FROM incidents WHERE floor_id = %(id)s) AS incidents
+                   (SELECT count(*) FROM incidents WHERE floor_id = %(id)s) AS incidents,
+                   (SELECT count(*) FROM users WHERE floor_id = %(id)s) AS users
             """,
             {"id": floor_id},
         )
@@ -215,13 +217,17 @@ def delete_seat(conn: Connection, seat_id: int) -> bool:
 
 
 def seat_usage(conn: Connection, seat_id: int) -> dict:
-    """Incidents at this seat, checked before a delete as for buildings.
+    """Incidents at this desk or room, and users whose desk it is, checked
+    before a delete as for buildings.
 
     Returned as a dict (not an int) to match the other *_usage functions.
     """
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT count(*) AS incidents FROM incidents WHERE seat_id = %(id)s",
+            """
+            SELECT (SELECT count(*) FROM incidents WHERE seat_id = %(id)s) AS incidents,
+                   (SELECT count(*) FROM users WHERE seat_id = %(id)s) AS users
+            """,
             {"id": seat_id},
         )
         return cur.fetchone()
